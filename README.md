@@ -222,3 +222,10 @@ python -m tools.strict_photo_quality_gate \
   - качество сегментации на вашем домене;
   - достоверность метрических измерений;
   - корректное поведение при низкой уверенности модели.
+
+## Разметка в Roboflow
+
+- Проект (Instance Segmentation): `https://app.roboflow.com/s-workspace-wlhsh/plant-2f4ay`
+- Версия датасета: `https://app.roboflow.com/s-workspace-wlhsh/plant-2f4ay/1`
+- Автоподготовка upload pack: `python -m tools.prepare_roboflow_pack ...`
+- Автозагрузка в Roboflow: `python -m tools.upload_roboflow_pack ...`

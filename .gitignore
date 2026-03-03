@@ -22,6 +22,7 @@ Thumbs.db
 
 # Runtime/config secrets
 .env
+calibration/scale_cache.json
 
 # Build/cache artifacts
 *.log

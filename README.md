@@ -226,6 +226,8 @@ python -m tools.strict_photo_quality_gate \
 ## Разметка в Roboflow
 
 - Проект (Instance Segmentation): `https://app.roboflow.com/s-workspace-wlhsh/plant-2f4ay`
-- Версия датасета: `https://app.roboflow.com/s-workspace-wlhsh/plant-2f4ay/1`
+- Актуальная версия датасета (строгая фильтрация): `https://app.roboflow.com/s-workspace-wlhsh/plant-2f4ay/2`
 - Автоподготовка upload pack: `python -m tools.prepare_roboflow_pack ...`
+- Строгая подготовка gold-pack: `python -m tools.prepare_roboflow_gold_pack ...`
 - Автозагрузка в Roboflow: `python -m tools.upload_roboflow_pack ...`
+- Полная очистка изображений проекта перед перезаливкой: `python -m tools.reset_roboflow_project_images ...`

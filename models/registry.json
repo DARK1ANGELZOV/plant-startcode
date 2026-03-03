@@ -1,0 +1,336 @@
+[
+  {
+    "version_id": "m_20260301_083338_901398",
+    "created_at": "2026-03-01T08:33:38.501857+00:00",
+    "path": "models/8decbff9f1ea402a9df398a0e458a8ac.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_192435_d18ce9",
+    "created_at": "2026-02-28T19:24:35.649521+00:00",
+    "path": "models/b29ee28a81954a0dbf00517ee348a4f6.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_191441_4742e4",
+    "created_at": "2026-02-28T19:14:41.462921+00:00",
+    "path": "models/61734eb0327640c0aa2530e44a8aa449.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_191223_0cd4fc",
+    "created_at": "2026-02-28T19:12:23.814991+00:00",
+    "path": "models/90c0d0d69c6b49d380bb75652dd4a47a.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_135211_631545",
+    "created_at": "2026-02-28T13:52:11.586892+00:00",
+    "path": "models/1ffb482ae4bf47f3b30043b036d4a3f6.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_135211_3858ee",
+    "created_at": "2026-02-28T13:52:11.409891+00:00",
+    "path": "models/best_max.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  },
+  {
+    "version_id": "m_20260228_103408_8332df",
+    "created_at": "2026-02-28T10:34:08.893644+00:00",
+    "path": "models/bfaf0cacc74048f3ae9c3cb794019eac.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_101936_ec11ef",
+    "created_at": "2026-02-28T10:19:36.744677+00:00",
+    "path": "models/78469a4423a04630887c24281f50f3ea.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_100309_8f69e2",
+    "created_at": "2026-02-28T10:03:09.592507+00:00",
+    "path": "models/b0005d63e8ee491bacc3f9b3ba20a349.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_100233_c8d091",
+    "created_at": "2026-02-28T10:02:33.092241+00:00",
+    "path": "models/ba149714b8874fb7acd61aded98104cf.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_082230_c494a2",
+    "created_at": "2026-02-28T08:22:30.499201+00:00",
+    "path": "models/73b8bc47206e4adfa832037931840af3.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_081027_965812",
+    "created_at": "2026-02-28T08:10:27.690276+00:00",
+    "path": "models/bcfa9e54351c411786b5167692270d2d.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_075916_6da1d4",
+    "created_at": "2026-02-28T07:59:16.381297+00:00",
+    "path": "models/f4cf234407604a80a8e2102c9964e303.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_072422_b59a3d",
+    "created_at": "2026-02-28T07:24:22.012745+00:00",
+    "path": "models/a5d00596edc24fab9fc62f66974f5c5e.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_070113_2ae8ec",
+    "created_at": "2026-02-28T07:01:13.067381+00:00",
+    "path": "models/b6332f91c4bd49f9b76a6b1d98794e1d.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_065938_563134",
+    "created_at": "2026-02-28T06:59:38.950840+00:00",
+    "path": "models/f44af82ecddf4e3fac5c88f468d012f7.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_065626_118b01",
+    "created_at": "2026-02-28T06:56:26.978360+00:00",
+    "path": "models/c5f1849d3ffa494e9b8a82d9f3752710.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_065507_75eeb7",
+    "created_at": "2026-02-28T06:55:07.601899+00:00",
+    "path": "models/50971d14aa52484083d2f7041d654392.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_065111_6a15cb",
+    "created_at": "2026-02-28T06:51:11.509004+00:00",
+    "path": "models/491f73ae8eb647279b1e03b106c943d8.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_063040_6e5ff6",
+    "created_at": "2026-02-28T06:30:40.147104+00:00",
+    "path": "models/3cd56e774173475cb50149c91d44e511.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_062847_63de4b",
+    "created_at": "2026-02-28T06:28:47.153233+00:00",
+    "path": "models/24abd4bfac42420cb3c1cc2a965e209c.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_062445_871d02",
+    "created_at": "2026-02-28T06:24:45.770615+00:00",
+    "path": "models/ec162e69fc284e1ca55ca30e76853576.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_062410_ee08db",
+    "created_at": "2026-02-28T06:24:10.792635+00:00",
+    "path": "models/df92644d3bb54ccbbf8737048c9c9308.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_055848_714e02",
+    "created_at": "2026-02-28T05:58:48.237599+00:00",
+    "path": "models/54f7098657b540599cc4a5a5850b8b36.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_055800_dedee2",
+    "created_at": "2026-02-28T05:58:00.100442+00:00",
+    "path": "models/8b5ade300ec9408d8a1af506fac69005.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260228_055800_0e0855",
+    "created_at": "2026-02-28T05:58:00.055442+00:00",
+    "path": "models/best.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  }
+]

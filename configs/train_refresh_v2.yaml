@@ -1,0 +1,59 @@
+seed: 42
+
+stage1:
+  model: models/best_max.pt
+  project: runs/segment
+  epochs: 10
+  batch: 4
+  imgsz: 640
+  device: auto
+  workers: 4
+  amp: true
+  patience: 8
+  optimizer: auto
+  lr0: 0.0018
+  lrf: 0.04
+  weight_decay: 0.0005
+  warmup_epochs: 2.0
+  mosaic: 0.35
+  mixup: 0.08
+  hsv_h: 0.015
+  hsv_s: 0.5
+  hsv_v: 0.3
+  degrees: 4.0
+  translate: 0.06
+  scale: 0.15
+  fliplr: 0.5
+  flipud: 0.0
+  cache: ram
+
+stage2:
+  enabled: false
+  project: runs/segment
+  epochs: 0
+  batch: 4
+  imgsz: 640
+  device: auto
+  workers: 4
+  amp: true
+  patience: 6
+  optimizer: auto
+  lr0: 0.001
+  lrf: 0.05
+  weight_decay: 0.0005
+  warmup_epochs: 1.0
+  mosaic: 0.15
+  mixup: 0.0
+  hsv_h: 0.012
+  hsv_s: 0.45
+  hsv_v: 0.25
+  degrees: 3.0
+  translate: 0.04
+  scale: 0.12
+  fliplr: 0.5
+  flipud: 0.0
+  cache: ram
+
+export:
+  dynamic: true
+  simplify: true

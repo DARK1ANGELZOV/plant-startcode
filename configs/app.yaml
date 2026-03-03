@@ -1,0 +1,145 @@
+app:
+  name: Agro AI System
+  environment: development
+  host: 0.0.0.0
+  port: 8000
+  log_level: INFO
+model:
+  weights: models/best_max.pt
+  pretrained: yolo11n-seg.pt
+  imgsz: 640
+  conf: 0.08
+  iou: 0.5
+  max_det: 200
+  use_gpu: true
+  amp: true
+  enable_ensemble: false
+  ensemble_weights:
+  - models/best_max.pt
+inference:
+  output_root: outputs
+  overlay_alpha: 0.45
+  save_masks: true
+  allow_heuristic_fallback: true
+  assist_on_no_detections: true
+  strict_model_mode: true
+  min_trust_confidence: 0.08
+  min_trust_area_ratio: 0.0005
+  min_trust_major_axis_ratio: 0.03
+  min_confidence_for_measurements: 0.05
+  class_colors:
+    root:
+    - 217
+    - 83
+    - 79
+    stem:
+    - 92
+    - 184
+    - 92
+    leaves:
+    - 66
+    - 139
+    - 202
+morphometry:
+  default_mm_per_px: 0.12
+  min_mask_area_px: 64
+  min_mask_area_px_by_class:
+    root: 12
+    stem: 16
+    leaves: 64
+  adaptive_scale:
+    enabled: false
+    min_confidence: 0.22
+    min_length_px: 30
+    mm_per_px_min: 0.05
+    mm_per_px_max: 0.35
+    max_relative_delta: 1.8
+    generic_target_length_mm: 80
+    priors_mm:
+      default:
+        root: 45
+        stem: 35
+        leaves: 80
+      Wheat:
+        root: 55
+        stem: 40
+        leaves: 95
+      Arugula:
+        root: 35
+        stem: 28
+        leaves: 70
+  metric_policy:
+    strict_scale_required: true
+    min_confidence_for_reliable_measurements: 0.7
+    valid_scale_sources:
+    - chessboard
+    - charuco
+    - cache
+  recommendation_thresholds:
+    Arugula:
+      min_root_length_mm: 18.0
+      min_stem_length_mm: 12.0
+      min_leaf_area_mm2: 95.0
+      min_leaf_root_ratio: 1.2
+      max_leaf_cv: 0.8
+    Wheat:
+      min_root_length_mm: 25.0
+      min_stem_length_mm: 16.0
+      min_leaf_area_mm2: 120.0
+      min_leaf_root_ratio: 1.0
+      max_leaf_cv: 0.9
+calibration:
+  board_size:
+  - 7
+  - 4
+  board_size_candidates:
+  - - 7
+    - 4
+  - - 4
+    - 7
+  - - 5
+    - 8
+  - - 8
+    - 5
+  - - 7
+    - 5
+  - - 5
+    - 7
+  - - 7
+    - 7
+  square_size_mm: 10.0
+  cache_path: calibration/scale_cache.json
+  use_cache_for_default_camera: false
+  auto_profile:
+    enabled: false
+    min_samples: 2
+    stable_samples: 6
+    max_cv: 0.35
+  charuco:
+    enabled: true
+    squares_x: 5
+    squares_y: 7
+    square_size_mm: 8.0
+    marker_size_mm: 6.0
+    dictionary: DICT_4X4_50
+seed:
+  value: 42
+analytics:
+  run_history_path: outputs/run_history.json
+registry:
+  model_registry_path: models/registry.json
+  dataset_registry_path: data/datasets_registry.json
+saas:
+  default_tenant: default
+database:
+  url: sqlite:///./data/agro_ai.db
+auth:
+  jwt_expire_minutes: 1440
+queue:
+  redis_url: redis://redis:6379/0
+tracking:
+  iou_threshold: 0.3
+  ema_alpha: 0.35
+active_learning:
+  root_dir: data/active_learning
+  low_conf_threshold: 0.12

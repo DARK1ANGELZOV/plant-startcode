@@ -1,0 +1,146 @@
+﻿seed: 42
+project_root: runs/robust
+
+classes:
+  - background
+  - root
+  - stem
+  - leaves
+
+hardware:
+  device: auto
+  num_workers: 4
+  amp: true
+
+logging:
+  tensorboard: true
+  wandb: false
+  wandb_project: agro-ai-robust-seg
+
+datasets:
+  # Expected local roots. If a path is missing, dataset is skipped.
+  sa1b:
+    root: data/external/sa1b
+    split: train
+    type: polygons_json
+    usage: pretrain
+    has_labels: true
+  coco:
+    root: data/external/coco
+    split: train
+    type: coco_panoptic
+    usage: pretrain
+    has_labels: true
+  openimages:
+    root: data/external/openimages
+    split: train
+    type: openimages_v6
+    usage: pretrain
+    has_labels: true
+  acdc:
+    root: data/external/acdc
+    split: train
+    type: acdc_semseg
+    usage: adverse
+    has_labels: true
+  weatherproof:
+    root: data/external/weatherproof
+    split: train
+    type: paired_clear_adverse
+    usage: adverse
+    has_labels: true
+  raidar:
+    root: data/external/raidar
+    split: train
+    type: adverse_road
+    usage: adverse
+    has_labels: true
+  mseg:
+    root: data/external/mseg
+    split: train
+    type: mseg_semseg
+    usage: multidomain
+    has_labels: true
+  plants_local:
+    root: data/hf_multisource_medium
+    split: train
+    type: yolo_seg
+    usage: plant
+    has_labels: true
+
+mapping:
+  # map raw classes to 0=background,1=root,2=stem,3=leaves; -1 means ignore
+  default_unknown: -1
+  by_dataset:
+    plants_local:
+      root: 1
+      stem: 2
+      leaves: 3
+    acdc:
+      vegetation: 3
+    mseg:
+      vegetation: 3
+    coco:
+      potted plant: 3
+      plant: 3
+
+training:
+  image_size: 1024
+  batch_size: 4
+  grad_accum_steps: 2
+  lr: 0.0002
+  weight_decay: 0.0001
+  epochs:
+    pretrain: 8
+    plant_finetune: 12
+    adverse_finetune: 8
+  early_stopping_patience: 8
+
+curriculum:
+  adverse_start_epoch: 3
+  adverse_max_ratio: 0.45
+  corruption_strength_start: 0.1
+  corruption_strength_end: 0.85
+
+augmentations:
+  gaussian_blur_prob: 0.35
+  motion_blur_prob: 0.25
+  brightness_contrast_prob: 0.45
+  rain_prob: 0.25
+  fog_prob: 0.25
+  jpeg_prob: 0.25
+  shadow_prob: 0.2
+  random_crop_scale_prob: 0.35
+  mixup_prob: 0.2
+  cutmix_prob: 0.2
+
+architectures:
+  compare:
+    - yolo_seg
+    - deeplabv3
+  yolo_seg:
+    model: yolo11s-seg.pt
+    imgsz: 1024
+    batch: 4
+    epochs: 25
+    project: runs/robust/yolo
+    name: yolo_robust
+  deeplabv3:
+    backbone: resnet50
+    pretrained: true
+    epochs: 18
+
+validation:
+  boundary_dilation: 3
+  corruption_tests:
+    - gaussian_blur
+    - motion_blur
+    - noise
+    - fog
+    - rain
+    - jpeg
+
+export:
+  onnx_dynamic: true
+  tensorrt: true
+  benchmark_image_size: 1024

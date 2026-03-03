@@ -1,0 +1,28 @@
+﻿seed: 42
+stage1:
+  model: yolo11n-seg.pt
+  project: runs/segment
+  epochs: 3
+  batch: 2
+  imgsz: 512
+  device: auto
+  workers: 2
+  amp: true
+  patience: 10
+  cache: ram
+  mosaic: 0.4
+  mixup: 0.05
+stage2:
+  enabled: false
+  project: runs/segment
+  epochs: 1
+  batch: 2
+  imgsz: 512
+  device: auto
+  workers: 2
+  amp: true
+  patience: 5
+  cache: ram
+export:
+  dynamic: true
+  simplify: false

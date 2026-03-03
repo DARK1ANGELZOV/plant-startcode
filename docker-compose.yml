@@ -1,0 +1,68 @@
+﻿services:
+  agro-api:
+    build: .
+    container_name: agro-ai-api
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/agro_ai.db}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+      - ./outputs:/app/outputs
+      - ./data:/app/data
+      - ./reports:/app/reports
+    depends_on:
+      - redis
+    gpus: all
+    restart: unless-stopped
+
+  rq-worker:
+    build: .
+    container_name: agro-ai-rq-worker
+    command: ["python", "-m", "task_queue.worker"]
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/agro_ai.db}
+    volumes:
+      - ./:/app
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: agro-ai-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: agro-ai-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - agro-api
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agro-ai-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/agro_api_dashboard.json:/var/lib/grafana/dashboards/agro_api_dashboard.json:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped

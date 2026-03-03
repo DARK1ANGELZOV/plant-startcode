@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Runtime/config secrets
+.env
+
+# Build/cache artifacts
+*.log
+*.tmp
+*.bak
+
+# ML artifacts (large)
+data/
+outputs/
+reports/
+runs/
+wandb/
+tensorboard/
+
+# Model binaries
+*.pt
+*.onnx
+*.engine
+*.bin
+*.ckpt
+*.safetensors
+models/*.pt
+models/*.onnx
+models/*.engine
+models/*.bin
+models/*.ckpt
+models/*.safetensors
+
+# Keep lightweight model metadata/docs
+!models/README.md
+!models/registry.json
+
+# Keep frontend assets
+!frontend/assets/**
+
+# Ignore accidental local media dumps
+изображение_2026-02-28_123917675-edited-free (carve.photos).png

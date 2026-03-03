@@ -1,0 +1,40 @@
+﻿train:
+  data_yaml: data/demo/dataset.yaml
+  project: runs/segment
+  name: arugula_wheat_seg
+  model: yolo11n-seg.pt
+  epochs: 40
+  batch: 8
+  imgsz: 640
+  workers: 4
+  device: auto
+  amp: true
+  patience: 15
+  save: true
+  save_period: -1
+  lr0: 0.005
+  lrf: 0.05
+  weight_decay: 0.0005
+  warmup_epochs: 3.0
+  mosaic: 0.6
+  mixup: 0.15
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 7.5
+  translate: 0.1
+  scale: 0.2
+  shear: 2.0
+  fliplr: 0.5
+  flipud: 0.0
+  cache: ram
+  overlap_mask: false
+  single_cls: false
+  optimizer: auto
+  val: true
+  plots: true
+  seed: 42
+
+export:
+  onnx_dynamic: true
+  simplify: true

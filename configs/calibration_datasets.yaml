@@ -1,0 +1,124 @@
+﻿calibration_datasets:
+  - id: chessboard_kaggle
+    name: StereoCamera Chessboard Pictures
+    type: kaggle
+    url: https://www.kaggle.com/datasets/danielwe14/stereocamera-chessboard-pictures
+    kaggle_slug: danielwe14/stereocamera-chessboard-pictures
+    local_dir: data/calibration/chessboard_kaggle
+    board:
+      kind: chessboard
+      board_size: [7, 7]
+      square_size_mm: 5.0
+
+  - id: mendeley_calibration_plate
+    name: Camera Calibration Plate Dataset
+    type: manual
+    url: https://data.mendeley.com/datasets/wf2gfcsxch/1
+    local_dir: data/calibration/mendeley_plate
+    board:
+      kind: chessboard
+      board_size: [7, 7]
+      square_size_mm: 5.0
+
+  - id: metric_zenodo
+    name: METRIC Multi-Eye To Robot Indoor Calibration
+    type: manual
+    url: https://zenodo.org/records/7976757
+    local_dir: data/calibration/metric
+    board:
+      kind: chessboard
+      board_size: [7, 7]
+      square_size_mm: 5.0
+
+  - id: mcalib
+    name: MCalib Multi-camera Calibration Dataset
+    type: manual
+    url: https://koonyook.github.io/MCalib/
+    local_dir: data/calibration/mcalib
+    board:
+      kind: charuco
+      squares_x: 5
+      squares_y: 7
+      square_size_mm: 8.0
+      marker_size_mm: 6.0
+      dictionary: DICT_4X4_50
+
+  - id: kit_fisheye
+    name: KIT Fisheye Calibration Dataset
+    type: manual
+    url: https://www.ipf.kit.edu/english/code_1852.php
+    local_dir: data/calibration/kit_fisheye
+    board:
+      kind: chessboard
+      board_size: [7, 7]
+      square_size_mm: 5.0
+
+  - id: roboflow_chess_detection
+    name: Roboflow Chess Object Detection
+    type: manual
+    url: https://universe.roboflow.com/calibration-rucun/chess-qyc2s
+    local_dir: data/calibration/roboflow_chess
+    board:
+      kind: chessboard
+      board_size: [7, 7]
+      square_size_mm: 5.0
+
+  - id: charuco_examples_whatpity
+    name: charucoCalibrate examples
+    type: git
+    url: https://github.com/What-Pity/charucoCalibrate
+    git_repo: https://github.com/What-Pity/charucoCalibrate.git
+    local_dir: data/calibration/charucoCalibrate
+    board:
+      kind: charuco
+      squares_x: 5
+      squares_y: 7
+      square_size_mm: 8.0
+      marker_size_mm: 6.0
+      dictionary: DICT_4X4_50
+
+  - id: calibcam_examples
+    name: calibcam Charuco examples
+    type: git
+    url: https://github.com/bbo-lab/calibcam
+    git_repo: https://github.com/bbo-lab/calibcam.git
+    local_dir: data/calibration/calibcam
+    board:
+      kind: charuco
+      squares_x: 5
+      squares_y: 7
+      square_size_mm: 8.0
+      marker_size_mm: 6.0
+      dictionary: DICT_4X4_50
+
+  - id: theta_camera_calibration_examples
+    name: camera-calibration examples
+    type: git
+    url: https://github.com/Theta-Limited/camera-calibration
+    git_repo: https://github.com/Theta-Limited/camera-calibration.git
+    local_dir: data/calibration/theta_camera_calibration
+    board:
+      kind: chessboard
+      board_size: [7, 7]
+      square_size_mm: 5.0
+
+  - id: amy_tabb_basic_calibration
+    name: basic-camera-calibration examples
+    type: git
+    url: https://github.com/amy-tabb/basic-camera-calibration
+    git_repo: https://github.com/amy-tabb/basic-camera-calibration.git
+    local_dir: data/calibration/basic_camera_calibration
+    board:
+      kind: chessboard
+      board_size: [7, 7]
+      square_size_mm: 5.0
+
+  - id: predictor_cloud_calib
+    name: Predictor Cloud Calibration Board (UFRC RAS)
+    type: manual
+    url: https://cloud.predictor.su/index.php/s/L2rfdxkS6wQ4XNt?path=%2Fcalib
+    local_dir: data/calibration/predictor_cloud_calib/raw/source/calib
+    board:
+      kind: chessboard
+      board_size: [7, 4]
+      square_size_mm: 10.0

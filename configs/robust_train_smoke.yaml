@@ -1,0 +1,92 @@
+seed: 42
+project_root: runs/robust_smoke
+
+classes:
+  - background
+  - root
+  - stem
+  - leaves
+
+hardware:
+  device: auto
+  num_workers: 0
+  amp: true
+
+logging:
+  tensorboard: false
+  wandb: false
+  wandb_project: agro-ai-robust-seg
+
+datasets:
+  plants_local:
+    root: data/hf_multisource_medium
+    split: train
+    type: yolo_seg
+    usage: plant
+    has_labels: true
+
+mapping:
+  default_unknown: -1
+  by_dataset:
+    plants_local:
+      root: 1
+      stem: 2
+      leaves: 3
+
+training:
+  image_size: 256
+  batch_size: 2
+  grad_accum_steps: 1
+  lr: 0.0005
+  weight_decay: 0.0001
+  epochs:
+    pretrain: 1
+    plant_finetune: 1
+    adverse_finetune: 1
+  early_stopping_patience: 2
+
+curriculum:
+  adverse_start_epoch: 1
+  adverse_max_ratio: 0.25
+  corruption_strength_start: 0.15
+  corruption_strength_end: 0.35
+
+augmentations:
+  gaussian_blur_prob: 0.2
+  motion_blur_prob: 0.1
+  brightness_contrast_prob: 0.2
+  rain_prob: 0.1
+  fog_prob: 0.1
+  jpeg_prob: 0.1
+  shadow_prob: 0.1
+  random_crop_scale_prob: 0.2
+  mixup_prob: 0.05
+  cutmix_prob: 0.05
+
+architectures:
+  compare:
+    - yolo_seg
+    - deeplabv3
+  yolo_seg:
+    model: yolo11n-seg.pt
+    imgsz: 256
+    batch: 2
+    epochs: 3
+    project: runs/robust_smoke/yolo
+    name: yolo_robust_smoke
+  deeplabv3:
+    backbone: resnet50
+    pretrained: true
+    epochs: 1
+
+validation:
+  boundary_dilation: 2
+  corruption_tests:
+    - gaussian_blur
+    - noise
+    - jpeg
+
+export:
+  onnx_dynamic: true
+  tensorrt: false
+  benchmark_image_size: 256

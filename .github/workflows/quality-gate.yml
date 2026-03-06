@@ -1,0 +1,94 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      full_gate:
+        description: "Run full strict gate (50 cases, 0.95 threshold)"
+        required: false
+        default: "false"
+
+jobs:
+  strict-gate-quick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run quick strict gate
+        working-directory: .
+        run: |
+          set -e
+          DATA_ROOT="data/demo/dataset/images"
+          if [ -d "data/hf_multisource_mega10/images" ]; then
+            DATA_ROOT="data/hf_multisource_mega10/images"
+          fi
+          python -m tools.strict_photo_quality_gate \
+            --n 10 \
+            --seed 42 \
+            --data-roots "$DATA_ROOT" \
+            --out reports/strict_ci_quick_10.json \
+            --strict-pass-threshold 0.88 \
+            --lightweight \
+            --fail-on-threshold
+
+      - name: Upload quick report
+        uses: actions/upload-artifact@v4
+        with:
+          name: strict-ci-quick-report
+          path: reports/strict_ci_quick_10.json
+
+  strict-gate-full:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_gate == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ensure full dataset exists
+        run: |
+          if [ ! -d "data/hf_multisource_mega10/images" ]; then
+            echo "Missing data/hf_multisource_mega10/images for full gate."
+            exit 1
+          fi
+
+      - name: Run full strict gate
+        run: |
+          python -m tools.strict_photo_quality_gate \
+            --n 50 \
+            --seed 42 \
+            --data-roots data/hf_multisource_mega10/images \
+            --out reports/strict_ci_full_50_very_strict.json \
+            --strict-pass-threshold 0.95 \
+            --lightweight \
+            --fail-on-threshold
+
+      - name: Upload full report
+        uses: actions/upload-artifact@v4
+        with:
+          name: strict-ci-full-report
+          path: reports/strict_ci_full_50_very_strict.json

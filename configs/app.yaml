@@ -20,6 +20,13 @@ inference:
   output_root: outputs
   overlay_alpha: 0.45
   save_masks: true
+  storage_retention:
+    enabled: true
+    keep_latest_runs: 250
+    min_free_gb: 4.0
+    target_free_gb: 8.0
+    delete_batch: 50
+    warn_only: false
   allow_heuristic_fallback: true
   assist_on_no_detections: true
   strict_model_mode: true
@@ -27,6 +34,16 @@ inference:
   min_trust_area_ratio: 0.0005
   min_trust_major_axis_ratio: 0.03
   min_confidence_for_measurements: 0.05
+  heuristic_area_caps:
+    enabled: true
+    max_root_fraction_of_plant: 0.30
+    max_stem_fraction_of_plant: 0.18
+    max_leaves_fraction_of_plant: 0.90
+    max_root_fraction_of_image: 0.08
+    max_stem_fraction_of_image: 0.05
+    max_leaves_fraction_of_image: 0.85
+    root_line_thickness_px: 8.0
+    stem_line_thickness_px: 12.0
   class_colors:
     root:
     - 217

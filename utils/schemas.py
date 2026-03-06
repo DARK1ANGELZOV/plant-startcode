@@ -62,6 +62,11 @@ class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
     model_path: str
+    storage_free_gb: float | None = None
+    storage_total_gb: float | None = None
+    storage_low_space: bool = False
+    storage_min_free_gb: float | None = None
+    run_dirs_count: int | None = None
 
 
 class FineTuneRequest(BaseModel):

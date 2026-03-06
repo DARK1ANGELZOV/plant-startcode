@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import asyncio
+import errno
 import logging
 import logging.handlers
 import os
@@ -231,11 +232,17 @@ async def startup_event() -> None:
         class_colors=class_colors,
         overlay_alpha=float(config['inference'].get('overlay_alpha', 0.45)),
     )
+    storage_service = StorageService(
+        config['inference']['output_root'],
+        retention_cfg=config.get('inference', {}).get('storage_retention', {}),
+        logger=logging.getLogger('services.storage_service'),
+    )
+    app.state.storage_service = storage_service
     app.state.active_learning_service = active_learning_service
     app.state.growth_tracking_service = GrowthTrackingService(
         model_service=model_service,
         calibrator=calibrator,
-        storage=StorageService(config['inference']['output_root']),
+        storage=storage_service,
         phi_service=phi_service,
         config=config,
     )
@@ -250,7 +257,7 @@ async def startup_event() -> None:
     app.state.inference_service = InferenceService(
         model_service=model_service,
         calibrator=calibrator,
-        storage=StorageService(config['inference']['output_root']),
+        storage=storage_service,
         reporter=ReportService(),
         recommender=RecommendationService(config['morphometry'].get('recommendation_thresholds', {})),
         config=config,
@@ -319,10 +326,18 @@ def _resolve_user_from_auth_header(
 async def health() -> HealthResponse:
     model_service: ModelService = app.state.model_service
     config = app.state.config
+    storage_service: StorageService | None = getattr(app.state, 'storage_service', None)
+    storage = storage_service.health_status() if storage_service is not None else {}
+    health_status = 'degraded' if bool(storage.get('low_space', False)) else 'ok'
     return HealthResponse(
-        status='ok',
+        status=health_status,
         model_loaded=model_service.is_loaded(),
         model_path=str(config['model']['weights']),
+        storage_free_gb=storage.get('free_gb'),
+        storage_total_gb=storage.get('total_gb'),
+        storage_low_space=bool(storage.get('low_space', False)),
+        storage_min_free_gb=storage.get('min_free_gb'),
+        run_dirs_count=storage.get('run_dirs_count'),
     )
 
 
@@ -587,6 +602,11 @@ async def chat_analyze(
             image.filename or 'input.png',
             exc,
         )
+        if isinstance(exc, OSError) and exc.errno in {28, errno.ENOSPC}:
+            raise HTTPException(
+                status_code=507,
+                detail='Недостаточно места на диске сервера. Повторите позже или очистите outputs.',
+            ) from exc
         raise
 
     insight_service: InsightService = app.state.insight_service

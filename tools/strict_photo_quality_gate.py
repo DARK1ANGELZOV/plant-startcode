@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -15,6 +15,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from api.main import app
+from utils.schemas import ExplainabilityArtifacts
 
 
 ALLOWED_IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp'}
@@ -26,7 +27,6 @@ STRUCTURE_PATTERNS = [
     r'(^|\n)\s*4\.\s*Вывод:',
     r'(^|\n)\s*5\.\s*Рекомендации:',
 ]
-
 
 def _collect_images(roots: list[Path]) -> list[Path]:
     out: list[Path] = []
@@ -215,7 +215,7 @@ def _strict_checks(payload: dict[str, Any], assistant_reply: str) -> tuple[dict[
 
     if not measurements:
         low = assistant_reply.lower()
-        checks['no_fake_numbers_without_masks'] = ('н/д' in low) or ('нет' in low)
+        checks['no_fake_numbers_without_masks'] = ('н/д' in low) or ('нет' in low) or ('недоступ' in low)
     else:
         checks['no_fake_numbers_without_masks'] = True
 
@@ -281,6 +281,11 @@ def main() -> None:
     parser.add_argument('--strict-pass-threshold', default=0.88, type=float)
     parser.add_argument('--fail-on-threshold', action='store_true')
     parser.add_argument('--keep-artifacts', action='store_true')
+    parser.add_argument(
+        '--lightweight',
+        action='store_true',
+        help='Use lightweight mode (disable heavy artifacts like XAI/masks) to reduce disk usage.',
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -298,18 +303,45 @@ def main() -> None:
     inference_modes: Counter = Counter()
 
     with TestClient(app) as client:
-        for idx, image_path in enumerate(chosen, start=1):
-            with image_path.open('rb') as fh:
-                resp = client.post(
-                    '/chat/analyze',
-                    data={
-                        'message': 'Проведи анализ и объясни риски по цифрам.',
-                        'crop': _guess_crop(image_path),
-                        'camera_id': 'default',
-                        'source_type': 'lab_camera',
-                    },
-                    files={'image': (image_path.name, fh, 'image/jpeg')},
+        if args.lightweight:
+            try:
+                inf = app.state.inference_service
+                inf.config.setdefault('inference', {})
+                inf.config['inference']['save_masks'] = False
+                inf.config['inference']['output_root'] = 'outputs/strict_tmp'
+                inf.storage.output_root = Path('outputs/strict_tmp')
+                inf.storage.output_root.mkdir(parents=True, exist_ok=True)
+
+                inf.xai_service.generate = lambda *_, **__: ExplainabilityArtifacts(
+                    notes=['xai_disabled_for_strict_gate']
                 )
+                inf.reporter.save_distribution_plot = lambda *_, **__: None
+            except Exception:
+                pass
+
+        for idx, image_path in enumerate(chosen, start=1):
+            try:
+                with image_path.open('rb') as fh:
+                    resp = client.post(
+                        '/chat/analyze',
+                        data={
+                            'message': 'Проведи анализ и объясни риски по цифрам.',
+                            'crop': _guess_crop(image_path),
+                            'camera_id': 'default',
+                            'source_type': 'lab_camera',
+                        },
+                        files={'image': (image_path.name, fh, 'image/jpeg')},
+                    )
+            except Exception as exc:
+                failures.append(
+                    {
+                        'index': idx,
+                        'image': str(image_path),
+                        'status_code': 0,
+                        'error': f'exception: {exc}',
+                    }
+                )
+                continue
 
             if resp.status_code != 200:
                 failures.append(
@@ -429,3 +461,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+

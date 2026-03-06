@@ -417,6 +417,91 @@ class InferenceService:
         stem_mask = self._cleanup_mask(stem_mask, min_area=max(10, int(0.0001 * h * w)), keep=2, k_open=2, k_close=3)
         leaves_mask = self._cleanup_mask(leaves_mask, min_area=max(18, int(0.0002 * h * w)), keep=5, k_open=2, k_close=3)
 
+        # Keep fallback geometry conservative to avoid inflated areas on hard backgrounds.
+        def _shrink_mask(mask: np.ndarray, max_area: int, keep: int = 3) -> np.ndarray:
+            out = (mask > 0).astype(np.uint8)
+            area = int(out.sum())
+            if area <= max_area:
+                return out
+
+            kernel = np.ones((3, 3), np.uint8)
+            for _ in range(12):
+                out = cv2.erode(out, kernel, iterations=1)
+                out = self._cleanup_mask(
+                    out,
+                    min_area=max(8, int(0.00008 * h * w)),
+                    keep=keep,
+                    k_open=1,
+                    k_close=2,
+                )
+                area = int(out.sum())
+                if area == 0 or area <= max_area:
+                    break
+            return out
+
+        cap_cfg = self.config.get('inference', {}).get('heuristic_area_caps', {})
+        cap_enabled = bool(cap_cfg.get('enabled', True))
+        if cap_enabled and plant_pixels > 0:
+            max_root_frac = float(cap_cfg.get('max_root_fraction_of_plant', 0.38))
+            max_stem_frac = float(cap_cfg.get('max_stem_fraction_of_plant', 0.18))
+            max_leaves_frac = float(cap_cfg.get('max_leaves_fraction_of_plant', 0.90))
+            max_root_img_frac = float(cap_cfg.get('max_root_fraction_of_image', 0.08))
+            max_stem_img_frac = float(cap_cfg.get('max_stem_fraction_of_image', 0.05))
+            max_leaves_img_frac = float(cap_cfg.get('max_leaves_fraction_of_image', 0.85))
+            root_line_thickness_px = float(cap_cfg.get('root_line_thickness_px', 8.0))
+            stem_line_thickness_px = float(cap_cfg.get('stem_line_thickness_px', 12.0))
+            max_root_frac = float(np.clip(max_root_frac, 0.08, 0.95))
+            max_stem_frac = float(np.clip(max_stem_frac, 0.04, 0.60))
+            max_leaves_frac = float(np.clip(max_leaves_frac, 0.30, 0.98))
+            max_root_img_frac = float(np.clip(max_root_img_frac, 0.01, 0.6))
+            max_stem_img_frac = float(np.clip(max_stem_img_frac, 0.005, 0.3))
+            max_leaves_img_frac = float(np.clip(max_leaves_img_frac, 0.05, 0.98))
+            root_line_thickness_px = float(np.clip(root_line_thickness_px, 2.0, 28.0))
+            stem_line_thickness_px = float(np.clip(stem_line_thickness_px, 3.0, 36.0))
+
+            root_area = int(root_mask.sum())
+            stem_area = int(stem_mask.sum())
+            leaves_area = int(leaves_mask.sum())
+
+            if green_fraction < 0.18:
+                root_limit_frac = max(max_root_frac, 0.55)
+            elif green_fraction < 0.30:
+                root_limit_frac = max_root_frac
+            else:
+                root_limit_frac = min(max_root_frac, 0.24)
+
+            img_pixels = int(max(1, h * w))
+            root_limit = int(max(16, min(plant_pixels * root_limit_frac, img_pixels * max_root_img_frac)))
+            stem_limit = int(max(12, min(plant_pixels * max_stem_frac, img_pixels * max_stem_img_frac)))
+            leaves_limit = int(max(20, min(plant_pixels * max_leaves_frac, img_pixels * max_leaves_img_frac)))
+
+            # Additional geometric caps for line-like organs on lab/root scenes.
+            if root_area > 0 and green_fraction < 0.35:
+                rx1, ry1, rx2, ry2 = self._mask_bbox(root_mask)
+                r_major = max(1, max(rx2 - rx1 + 1, ry2 - ry1 + 1))
+                root_line_limit = int(max(24, r_major * root_line_thickness_px))
+                root_limit = min(root_limit, root_line_limit)
+
+            if stem_area > 0 and green_fraction < 0.35:
+                sx1, sy1, sx2, sy2 = self._mask_bbox(stem_mask)
+                s_major = max(1, max(sx2 - sx1 + 1, sy2 - sy1 + 1))
+                stem_line_limit = int(max(18, s_major * stem_line_thickness_px))
+                stem_limit = min(stem_limit, stem_line_limit)
+
+            # Root in fallback should remain line-like, not dominate whole plant blob.
+            if root_area > root_limit:
+                sk = self._skeletonize(root_mask)
+                root_mask = cv2.dilate(sk, np.ones((3, 3), np.uint8), iterations=1)
+                root_mask = self._cleanup_mask(root_mask, min_area=max(10, int(0.0001 * h * w)), keep=6, k_open=1, k_close=2)
+                if int(root_mask.sum()) > root_limit:
+                    root_mask = _shrink_mask(root_mask, root_limit, keep=6)
+
+            if stem_area > stem_limit:
+                stem_mask = _shrink_mask(stem_mask, stem_limit, keep=2)
+
+            if leaves_area > leaves_limit:
+                leaves_mask = _shrink_mask(leaves_mask, leaves_limit, keep=5)
+
         root_fraction = float(int(root_mask.sum())) / float(max(1, plant_pixels))
         stem_fraction = float(int(stem_mask.sum())) / float(max(1, plant_pixels))
         leaves_fraction = float(int(leaves_mask.sum())) / float(max(1, plant_pixels))

@@ -74,11 +74,20 @@ def train_stage(
         'scale': float(stage_cfg.get('scale', 0.2)),
         'fliplr': float(stage_cfg.get('fliplr', 0.5)),
         'flipud': float(stage_cfg.get('flipud', 0.0)),
+        'copy_paste': float(stage_cfg.get('copy_paste', 0.0)),
+        'close_mosaic': int(stage_cfg.get('close_mosaic', 10)),
+        'box': float(stage_cfg.get('box', 7.5)),
+        'cls': float(stage_cfg.get('cls', 0.5)),
+        'dfl': float(stage_cfg.get('dfl', 1.5)),
+        'cos_lr': bool(stage_cfg.get('cos_lr', False)),
+        'dropout': float(stage_cfg.get('dropout', 0.0)),
+        'fraction': float(stage_cfg.get('fraction', 1.0)),
         'cache': stage_cfg.get('cache', 'ram'),
         'seed': int(stage_cfg.get('seed', 42)),
         'val': True,
         'plots': has_polars,
-        'overlap_mask': False,
+        'overlap_mask': bool(stage_cfg.get('overlap_mask', True)),
+        'mask_ratio': int(stage_cfg.get('mask_ratio', 4)),
         'single_cls': False,
     }
 
@@ -100,6 +109,7 @@ def main() -> None:
     parser.add_argument('--stage1-data', default='data/hf_multisource_yoloseg/dataset.yaml', type=str)
     parser.add_argument('--stage2-data', default='', type=str)
     parser.add_argument('--name', default='max_pipeline', type=str)
+    parser.add_argument('--no-plots', action='store_true', help='Disable all plotting during train/val.')
     args = parser.parse_args()
 
     cfg = load_yaml(args.config)
@@ -107,6 +117,8 @@ def main() -> None:
     set_global_seed(seed)
     patch_ultralytics_polars()
     has_polars = polars_available()
+    if args.no_plots:
+        has_polars = False
 
     stage1_cfg = cfg['stage1']
     stage2_cfg = cfg.get('stage2', {})

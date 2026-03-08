@@ -1,4 +1,4 @@
-from services.insight_service import InsightService
+﻿from services.insight_service import InsightService
 from utils.schemas import PlantMeasurement, PredictResponse, Recommendation
 
 
@@ -20,7 +20,7 @@ def test_compose_reply_with_measurements() -> None:
                 length_mm=4.0,
             )
         ],
-        summary={},
+        summary={'calibration_reliable': True},
         recommendations=[
             Recommendation(
                 severity='warning',
@@ -33,6 +33,7 @@ def test_compose_reply_with_measurements() -> None:
     text = service.compose_reply(result, user_message='Проверь корень')
     assert 'Результаты анализа изображения:' in text
     assert '1. Сегментация:' in text
+    assert '2. Измерения (мм):' in text
     assert '5. Рекомендации:' in text
 
 
@@ -43,7 +44,7 @@ def test_compose_reply_without_measurements() -> None:
         scale_mm_per_px=0.12,
         scale_source='fallback',
         measurements=[],
-        summary={},
+        summary={'calibration_reliable': False},
         recommendations=[],
         files={},
     )

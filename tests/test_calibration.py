@@ -106,3 +106,57 @@ def test_detects_5x8_checkerboard_with_10mm_cells(tmp_path: Path) -> None:
     scale, source = calibrator.get_scale(image, camera_id='cam_checker', use_cache=False)
     assert source == 'chessboard'
     assert 0.22 <= scale <= 0.28
+
+
+def test_calibrate_and_store_marks_cache_as_validated(tmp_path: Path) -> None:
+    cache_file = tmp_path / 'scale_cache.json'
+    calibrator = ScaleCalibrator(
+        cache_path=str(cache_file),
+        default_mm_per_px=0.2,
+        board_size=(7, 4),
+        board_size_candidates=[(7, 4), (4, 7)],
+        square_size_mm=10.0,
+    )
+
+    square_px = 40
+    rows_squares = 5
+    cols_squares = 8
+    margin = 20
+    h = rows_squares * square_px + 2 * margin
+    w = cols_squares * square_px + 2 * margin
+    image = np.full((h, w, 3), 255, dtype=np.uint8)
+    for r in range(rows_squares):
+        for c in range(cols_squares):
+            color = 0 if (r + c) % 2 == 0 else 255
+            y1 = margin + r * square_px
+            x1 = margin + c * square_px
+            cv2.rectangle(image, (x1, y1), (x1 + square_px, y1 + square_px), (color, color, color), thickness=-1)
+
+    scale, source = calibrator.calibrate_and_store(image=image, camera_id='lab_camera')
+    assert source == 'chessboard'
+    assert scale is not None
+    assert calibrator.is_cache_scale_validated('lab_camera') is True
+
+    no_board = np.zeros((120, 120, 3), dtype=np.uint8)
+    cached_scale, cached_source = calibrator.get_scale(no_board, camera_id='lab_camera', use_cache=True)
+    assert cached_source == 'cache'
+    assert abs(float(cached_scale) - float(scale)) < 1e-6
+
+
+def test_list_profiles_skips_auto_profile_keys(tmp_path: Path) -> None:
+    cache_file = tmp_path / 'scale_cache.json'
+    calibrator = ScaleCalibrator(
+        cache_path=str(cache_file),
+        default_mm_per_px=0.2,
+        board_size=(7, 4),
+        square_size_mm=10.0,
+    )
+    calibrator.upsert_scale('lab_camera', 0.12, fingerprint='manual_api')
+    calibrator.update_auto_scale(0.12, camera_id='default', source_type='lab_camera', crop='Wheat')
+    calibrator.update_auto_scale(0.121, camera_id='default', source_type='lab_camera', crop='Wheat')
+    calibrator.update_auto_scale(0.119, camera_id='default', source_type='lab_camera', crop='Wheat')
+
+    profiles = calibrator.list_profiles(validated_only=True)
+    ids = {p['camera_id'] for p in profiles}
+    assert 'lab_camera' in ids
+    assert all(not str(x).startswith(ScaleCalibrator.AUTO_PREFIX) for x in ids)

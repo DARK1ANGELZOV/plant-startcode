@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import pytest
 
@@ -51,13 +51,24 @@ def _response(
 def test_reply_contains_compact_sections() -> None:
     service = InsightService()
     result = _response(
-        measurements=[_measurement(instance_id=1, cls='root', confidence=0.9, length_px=200.0, area_px=1200.0, length_mm=24.0, area_mm2=150.0)],
+        measurements=[
+            _measurement(
+                instance_id=1,
+                cls='root',
+                confidence=0.9,
+                length_px=200.0,
+                area_px=1200.0,
+                length_mm=24.0,
+                area_mm2=150.0,
+            )
+        ],
         recommendations=[Recommendation(severity='ok', message='Все стабильно', action='Продолжать мониторинг.')],
+        summary={'calibration_reliable': True},
     )
     text = service.compose_reply(result, user_message='Сделай анализ')
     assert 'Результаты анализа изображения:' in text
     assert '1. Сегментация:' in text
-    assert '2. Измерения (px):' in text
+    assert '2. Измерения (мм):' in text
     assert '3. Перевод в мм:' in text
     assert '4. Вывод:' in text
     assert '5. Рекомендации:' in text
@@ -72,7 +83,7 @@ def test_reply_user_message_trimming(user_message: str) -> None:
     assert '5. Рекомендации:' in text
 
 
-def test_unreliable_scale_shows_approximate_mm() -> None:
+def test_unreliable_scale_blocks_mm_conversion() -> None:
     service = InsightService()
     result = _response(
         measurements=[_measurement(instance_id=1, cls='stem', confidence=0.8, length_px=120.0, area_px=1000.0)],
@@ -81,8 +92,7 @@ def test_unreliable_scale_shows_approximate_mm() -> None:
         summary={'calibration_reliable': False},
     )
     text = service.compose_reply(result)
-    assert 'Примерный масштаб' in text
-    assert 'низкая точность' in text
+    assert 'Невозможен: нет валидной геометрической калибровки' in text
 
 
 def test_reliable_scale_shows_metric_mm() -> None:
@@ -97,7 +107,7 @@ def test_reliable_scale_shows_metric_mm() -> None:
         summary={'calibration_reliable': True},
     )
     text = service.compose_reply(result)
-    assert 'источник: chessboard' in text
+    assert 'Источник: chessboard' in text
     assert 'Длина корня' in text
     assert 'Площадь листьев' in text
 
@@ -112,7 +122,7 @@ def test_reply_uses_prior_context_feedback() -> None:
         result,
         prior_context=['В прошлый раз это не помогло', 'Стало хуже после полива'],
     )
-    assert 'прошлые действия не помогли' in text
+    assert 'прошлую неудачу' in text
 
 
 def test_recommendations_fallback_when_empty() -> None:
@@ -121,3 +131,40 @@ def test_recommendations_fallback_when_empty() -> None:
     text = service.compose_reply(result)
     assert 'Переснимите фото' in text
     assert 'проблемную зону' in text
+
+
+def test_reply_uses_px_when_mm_not_reliable() -> None:
+    service = InsightService()
+    result = _response(
+        measurements=[
+            _measurement(instance_id=1, cls='root', confidence=0.92, length_px=140.0, area_px=1200.0),
+        ],
+        scale_mm_per_px=0.12,
+        scale_source='fallback',
+        summary={'calibration_reliable': False},
+    )
+    text = service.compose_reply(result)
+    assert '2. Измерения (px):' in text
+    assert 'Длина корня: 140.0 px' in text
+    assert 'Невозможен: нет валидной геометрической калибровки' in text
+
+
+def test_reply_hides_low_confidence_numbers() -> None:
+    service = InsightService({'min_confidence_for_numeric': 0.8})
+    result = _response(
+        measurements=[
+            _measurement(
+                instance_id=1,
+                cls='stem',
+                confidence=0.5,
+                length_px=99.0,
+                area_px=500.0,
+                length_mm=9.9,
+                area_mm2=50.0,
+            )
+        ],
+        summary={'calibration_reliable': True},
+    )
+    text = service.compose_reply(result)
+    assert '2. Измерения (мм):' in text
+    assert 'Длина стебля: н/д' in text

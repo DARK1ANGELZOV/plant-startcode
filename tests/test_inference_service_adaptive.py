@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import cv2
 import numpy as np
@@ -20,8 +20,10 @@ class DummyModelService:
     def __init__(self, detections: list[Detection], image: np.ndarray) -> None:
         self._detections = detections
         self._image = image
+        self.last_kwargs = {}
 
     async def predict(self, **kwargs):
+        self.last_kwargs = dict(kwargs)
         return {
             'image': self._image.copy(),
             'overlay': self._image.copy(),
@@ -31,6 +33,7 @@ class DummyModelService:
 
 def _config(output_root: str) -> dict:
     return {
+        'model': {'conf': 0.08, 'iou': 0.5, 'max_det': 200},
         'inference': {
             'output_root': output_root,
             'overlay_alpha': 0.45,
@@ -39,6 +42,27 @@ def _config(output_root: str) -> dict:
             'min_trust_area_ratio': 0.0015,
             'min_trust_major_axis_ratio': 0.06,
             'min_confidence_for_measurements': 0.03,
+            'adaptive_params': {
+                'enabled': True,
+                'respect_manual_overrides': True,
+                'hard_severity_threshold': 2,
+                'blur_threshold': 55.0,
+                'low_light_threshold': 75.0,
+                'overexposed_threshold': 210.0,
+                'low_contrast_threshold': 30.0,
+                'conf_mild_multiplier': 0.9,
+                'conf_hard_multiplier': 0.72,
+                'iou_mild_multiplier': 0.96,
+                'iou_hard_multiplier': 0.88,
+                'max_det_mild_multiplier': 1.2,
+                'max_det_hard_multiplier': 1.5,
+                'min_conf': 0.01,
+                'max_conf': 0.35,
+                'min_iou': 0.35,
+                'max_iou': 0.7,
+                'min_max_det': 20,
+                'max_max_det': 400,
+            },
             'class_colors': {
                 'root': [217, 83, 79],
                 'stem': [92, 184, 92],
@@ -62,6 +86,11 @@ def _config(output_root: str) -> dict:
                     'Wheat': {'root': 55, 'stem': 40, 'leaves': 95},
                 },
             },
+            'metric_policy': {
+                'strict_scale_required': True,
+                'min_confidence_for_reliable_measurements': 0.7,
+                'valid_scale_sources': ['chessboard', 'charuco', 'cache'],
+            },
             'recommendation_thresholds': {
                 'Wheat': {
                     'min_root_length_mm': 25.0,
@@ -70,6 +99,16 @@ def _config(output_root: str) -> dict:
                     'min_leaf_root_ratio': 1.0,
                     'max_leaf_cv': 0.9,
                 }
+            },
+        },
+        'calibration': {
+            'use_cache_for_default_camera': True,
+            'allow_default_profile_cache': True,
+            'default_camera_profiles': {
+                'lab_camera': 'lab_camera',
+                'phone_camera': 'phone_user',
+                'scanner': 'demo_cam',
+                'default': 'default',
             },
         },
         'active_learning': {
@@ -158,6 +197,7 @@ async def test_run_single_drops_untrustworthy_model_output_in_strict_mode(tmp_pa
     assert not result.measurements
     assert 'Нет уверенных детекций модели' in str((result.summary or {}).get('inference_note', ''))
 
+
 @pytest.mark.asyncio
 async def test_run_single_blocks_mm_without_valid_calibration(tmp_path) -> None:
     image = np.zeros((240, 320, 3), dtype=np.uint8)
@@ -191,3 +231,36 @@ async def test_run_single_blocks_mm_without_valid_calibration(tmp_path) -> None:
     assert measurement.length_mm is None
     assert measurement.area_mm2 is None
     assert (result.summary or {}).get('mm_conversion_possible') is False
+
+
+@pytest.mark.asyncio
+async def test_run_single_adapts_inference_params_for_low_quality(tmp_path) -> None:
+    image = np.full((256, 256, 3), 30, dtype=np.uint8)
+    image = cv2.GaussianBlur(image, (11, 11), 0)
+    ok, enc = cv2.imencode('.png', image)
+    assert ok
+
+    det = Detection(
+        instance_id=0,
+        class_id=2,
+        class_name='leaves',
+        confidence=0.82,
+        bbox_xyxy=[80.0, 80.0, 180.0, 180.0],
+        mask=np.pad(np.ones((100, 100), dtype=np.uint8), ((80, 76), (80, 76))),
+    )
+    model = DummyModelService([det], image)
+    service = _build_service(tmp_path, model)
+
+    result = await service.run_single(
+        image_bytes=enc.tobytes(),
+        image_name='dark_low_quality.png',
+        crop='Wheat',
+        source_type='lab_camera',
+    )
+
+    adaptive = (result.summary or {}).get('adaptive_inference') or {}
+    assert adaptive.get('enabled') is True
+    assert adaptive.get('applied') is True
+    assert 'low_light' in (adaptive.get('reasons') or [])
+    assert float(model.last_kwargs.get('conf', 0.08)) < 0.08
+    assert int(model.last_kwargs.get('max_det', 200)) >= 200

@@ -1,0 +1,77 @@
+seed: 42
+
+stage1:
+  model: yolo11n-seg.pt
+  project: runs/segment
+  epochs: 1
+  batch: 2
+  imgsz: 512
+  device: auto
+  workers: 0
+  amp: true
+  patience: 2
+  optimizer: AdamW
+  lr0: 0.0015
+  lrf: 0.08
+  weight_decay: 0.0005
+  warmup_epochs: 0.5
+  mosaic: 0.2
+  close_mosaic: 5
+  mixup: 0.0
+  copy_paste: 0.10
+  overlap_mask: true
+  mask_ratio: 2
+  box: 8.5
+  cls: 0.85
+  dfl: 1.5
+  cos_lr: false
+  fraction: 0.03
+  hsv_h: 0.015
+  hsv_s: 0.30
+  hsv_v: 0.20
+  degrees: 1.5
+  translate: 0.05
+  scale: 0.14
+  fliplr: 0.5
+  flipud: 0.0
+  cache: false
+
+stage2:
+  enabled: true
+  project: runs/segment
+  epochs: 1
+  batch: 2
+  imgsz: 512
+  device: auto
+  workers: 0
+  amp: true
+  patience: 2
+  optimizer: AdamW
+  lr0: 0.0010
+  lrf: 0.08
+  weight_decay: 0.0005
+  warmup_epochs: 0.5
+  mosaic: 0.1
+  close_mosaic: 4
+  mixup: 0.0
+  copy_paste: 0.05
+  overlap_mask: true
+  mask_ratio: 2
+  box: 8.0
+  cls: 0.70
+  dfl: 1.5
+  cos_lr: false
+  fraction: 0.02
+  hsv_h: 0.015
+  hsv_s: 0.25
+  hsv_v: 0.20
+  degrees: 1.0
+  translate: 0.04
+  scale: 0.10
+  fliplr: 0.5
+  flipud: 0.0
+  cache: false
+
+export:
+  dynamic: true
+  simplify: true

@@ -34,6 +34,26 @@ inference:
   min_trust_area_ratio: 0.0005
   min_trust_major_axis_ratio: 0.03
   min_confidence_for_measurements: 0.05
+  adaptive_params:
+    enabled: true
+    respect_manual_overrides: true
+    hard_severity_threshold: 2
+    blur_threshold: 55.0
+    low_light_threshold: 75.0
+    overexposed_threshold: 210.0
+    low_contrast_threshold: 30.0
+    conf_mild_multiplier: 0.9
+    conf_hard_multiplier: 0.72
+    iou_mild_multiplier: 0.96
+    iou_hard_multiplier: 0.88
+    max_det_mild_multiplier: 1.2
+    max_det_hard_multiplier: 1.5
+    min_conf: 0.01
+    max_conf: 0.35
+    min_iou: 0.35
+    max_iou: 0.7
+    min_max_det: 20
+    max_max_det: 400
   heuristic_area_caps:
     enabled: true
     max_root_fraction_of_plant: 0.30
@@ -126,7 +146,29 @@ calibration:
     - 7
   square_size_mm: 10.0
   cache_path: calibration/scale_cache.json
-  use_cache_for_default_camera: false
+  use_cache_for_default_camera: true
+  allow_default_profile_cache: true
+  default_camera_profiles:
+    lab_camera: lab_camera
+    phone_camera: phone_user
+    scanner: demo_cam
+    default: default
+  startup_bootstrap:
+    enabled: true
+    only_if_missing: true
+    max_images_per_profile: 12
+    profiles:
+      - camera_id: lab_camera
+        source_type: lab_camera
+        image_paths:
+          - data/demo/calibration_board.png
+          - data/calibration/user_chessboard.png
+        manual_mm_per_px: 0.12
+      - camera_id: phone_user
+        source_type: phone_camera
+        image_paths:
+          - data/demo/calibration_board.png
+        manual_mm_per_px: 0.12
   auto_profile:
     enabled: false
     min_samples: 2
@@ -152,6 +194,12 @@ database:
   url: sqlite:///./data/agro_ai.db
 auth:
   jwt_expire_minutes: 1440
+chat_reply:
+  compact_mode: true
+  min_confidence_for_numeric: 0.35
+  max_recommendations: 2
+  max_quality_notes: 1
+  include_px_fallback: true
 queue:
   redis_url: redis://redis:6379/0
 tracking:

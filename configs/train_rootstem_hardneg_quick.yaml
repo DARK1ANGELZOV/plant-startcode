@@ -1,0 +1,35 @@
+﻿seed: 42
+
+stage1:
+  model: yolo11n-seg.pt
+  project: runs/segment
+  epochs: 5
+  batch: 2
+  imgsz: 512
+  device: auto
+  workers: 0
+  amp: true
+  patience: 5
+  optimizer: AdamW
+  lr0: 0.0025
+  lrf: 0.08
+  weight_decay: 0.0005
+  warmup_epochs: 1.0
+  mosaic: 0.25
+  mixup: 0.05
+  hsv_h: 0.02
+  hsv_s: 0.6
+  hsv_v: 0.35
+  degrees: 5.0
+  translate: 0.08
+  scale: 0.2
+  fliplr: 0.5
+  flipud: 0.0
+  cache: false
+
+stage2:
+  enabled: false
+
+export:
+  dynamic: true
+  simplify: true

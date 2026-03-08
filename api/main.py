@@ -34,6 +34,7 @@ from services.insight_service import InsightService
 from services.job_service import JobService
 from services.model_registry_service import ModelRegistryService
 from services.model_service import ModelService
+from services.plantcv_service import PlantCVService
 from services.consultation_service import ConsultationService
 from services.phi_service import PHIService
 from services.recommendation_service import RecommendationService
@@ -43,10 +44,13 @@ from services.storage_service import StorageService
 from services.xai_service import XAIService
 from utils.config import load_app_config
 from utils.errors import AgroAIError
+from utils.image_io import decode_image_bytes
 from utils.logging import setup_logging
 from utils.schemas import (
     ActiveLearningQueueResponse,
     BlindEvalRequest,
+    CalibrationProfileListResponse,
+    CalibrationProfileResponse,
     ChatAnalyzeResponse,
     ChatTextRequest,
     ChatTextResponse,
@@ -81,6 +85,134 @@ from utils.seed import set_global_seed
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parents[1]
+IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp'}
+
+
+def _resolve_local_path(raw_path: str) -> Path:
+    p = Path(str(raw_path).strip())
+    if p.is_absolute():
+        return p
+    return (BASE_DIR / p).resolve()
+
+
+def _expand_image_candidates(items: list[str], max_images: int) -> list[Path]:
+    found: list[Path] = []
+    seen: set[str] = set()
+    for raw in items:
+        raw = str(raw).strip()
+        if not raw:
+            continue
+        p = _resolve_local_path(raw)
+        if ('*' in raw or '?' in raw or '[' in raw) and (not p.exists()):
+            for gp in sorted(BASE_DIR.glob(raw)):
+                if gp.is_file() and gp.suffix.lower() in IMAGE_EXTS:
+                    key = str(gp.resolve())
+                    if key not in seen:
+                        seen.add(key)
+                        found.append(gp.resolve())
+                if len(found) >= max_images:
+                    return found
+            continue
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
+            key = str(p.resolve())
+            if key not in seen:
+                seen.add(key)
+                found.append(p.resolve())
+        elif p.is_dir():
+            for img in sorted(p.rglob('*')):
+                if not img.is_file() or img.suffix.lower() not in IMAGE_EXTS:
+                    continue
+                key = str(img.resolve())
+                if key in seen:
+                    continue
+                seen.add(key)
+                found.append(img.resolve())
+                if len(found) >= max_images:
+                    return found
+    return found
+
+
+def _resolve_bootstrap_camera_id(config: dict, camera_id: str, source_type: str) -> str:
+    cid = str(camera_id or 'default').strip() or 'default'
+    if cid != 'default':
+        return cid
+    profile_map = config.get('calibration', {}).get('default_camera_profiles', {}) or {}
+    src = str(source_type or 'unknown').strip().lower()
+    mapped = profile_map.get(src) or profile_map.get('default')
+    if isinstance(mapped, str) and mapped.strip():
+        return mapped.strip()
+    return cid
+
+
+def _bootstrap_calibration_profiles(config: dict, calibrator: ScaleCalibrator) -> None:
+    boot_cfg = config.get('calibration', {}).get('startup_bootstrap', {}) or {}
+    enabled = bool(boot_cfg.get('enabled', False))
+    if not enabled:
+        return
+    only_if_missing = bool(boot_cfg.get('only_if_missing', True))
+    max_images = max(1, int(boot_cfg.get('max_images_per_profile', 15)))
+    profiles = boot_cfg.get('profiles', []) or []
+    if not isinstance(profiles, list):
+        return
+
+    for row in profiles:
+        if not isinstance(row, dict):
+            continue
+        raw_camera_id = str(row.get('camera_id', 'default'))
+        source_type = str(row.get('source_type', 'unknown'))
+        camera_id = _resolve_bootstrap_camera_id(config, raw_camera_id, source_type)
+
+        if only_if_missing and calibrator.is_cache_scale_validated(camera_id):
+            logger.info('Calibration bootstrap skip: profile %s already validated.', camera_id)
+            continue
+
+        image_paths = row.get('image_paths', []) or []
+        if isinstance(image_paths, str):
+            image_paths = [image_paths]
+        candidates = _expand_image_candidates([str(x) for x in image_paths], max_images=max_images)
+
+        applied = False
+        for path in candidates:
+            img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if img is None:
+                continue
+            scale, source = calibrator.calibrate_and_store(image=img, camera_id=camera_id)
+            if scale is None or source is None:
+                continue
+            logger.info(
+                'Calibration bootstrap applied: camera_id=%s mm_per_px=%.6f source=%s image=%s',
+                camera_id,
+                float(scale),
+                source,
+                path,
+            )
+            applied = True
+            break
+
+        if applied:
+            continue
+
+        manual_mm_per_px = row.get('manual_mm_per_px', None)
+        if manual_mm_per_px is not None:
+            try:
+                mm = float(manual_mm_per_px)
+                if 0.0 < mm <= 2.0:
+                    calibrator.upsert_scale(camera_id=camera_id, mm_per_px=mm, fingerprint='manual_bootstrap')
+                    logger.warning(
+                        'Calibration bootstrap fallback manual profile: camera_id=%s mm_per_px=%.6f',
+                        camera_id,
+                        mm,
+                    )
+                    applied = True
+            except Exception:
+                applied = False
+
+        if not applied:
+            logger.warning(
+                'Calibration bootstrap failed: camera_id=%s source_type=%s (no valid calibration image found).',
+                camera_id,
+                source_type,
+            )
 
 
 app = FastAPI(
@@ -195,6 +327,7 @@ async def startup_event() -> None:
         auto_stable_samples=int(config.get('calibration', {}).get('auto_profile', {}).get('stable_samples', 8)),
         auto_max_cv=float(config.get('calibration', {}).get('auto_profile', {}).get('max_cv', 0.35)),
     )
+    _bootstrap_calibration_profiles(config=config, calibrator=calibrator)
     history_service = RunHistoryService(
         config.get('analytics', {}).get('run_history_path', 'outputs/run_history.json')
     )
@@ -212,6 +345,7 @@ async def startup_event() -> None:
     class_colors = {k: tuple(v) for k, v in config['inference'].get('class_colors', {}).items()}
     phi_service = PHIService(config['morphometry'].get('recommendation_thresholds', {}))
     xai_service = XAIService()
+    plantcv_service = PlantCVService()
     active_learning_service = ActiveLearningService(
         root_dir=str(config.get('active_learning', {}).get('root_dir', 'data/active_learning')),
         low_conf_threshold=float(config.get('active_learning', {}).get('low_conf_threshold', 0.12)),
@@ -219,13 +353,14 @@ async def startup_event() -> None:
 
     app.state.config = config
     app.state.model_service = model_service
-    app.state.insight_service = InsightService()
+    app.state.insight_service = InsightService(config.get('chat_reply', {}))
     app.state.history_service = history_service
     app.state.model_registry = model_registry
     app.state.dataset_registry = dataset_registry
     app.state.auth_service = AuthService()
     app.state.chat_service = ChatService()
     app.state.consultation_service = ConsultationService()
+    app.state.plantcv_service = plantcv_service
     app.state.blind_eval_service = BlindEvaluationService(model_service=model_service, class_colors=class_colors)
     app.state.robustness_service = RobustnessService(
         model_service=model_service,
@@ -263,9 +398,11 @@ async def startup_event() -> None:
         config=config,
         history_service=history_service,
         phi_service=phi_service,
+        plantcv_service=plantcv_service,
         xai_service=xai_service,
         active_learning_service=active_learning_service,
     )
+    app.state.calibrator = calibrator
     logger.info('Application startup complete.')
 
 
@@ -339,6 +476,78 @@ async def health() -> HealthResponse:
         storage_min_free_gb=storage.get('min_free_gb'),
         run_dirs_count=storage.get('run_dirs_count'),
     )
+
+
+@app.get('/calibration/profiles', response_model=CalibrationProfileListResponse)
+async def calibration_profiles(
+    validated_only: bool = Query(True),
+) -> CalibrationProfileListResponse:
+    calibrator: ScaleCalibrator = app.state.calibrator
+    items = [CalibrationProfileResponse(**row) for row in calibrator.list_profiles(validated_only=validated_only)]
+    return CalibrationProfileListResponse(count=len(items), items=items)
+
+
+@app.get('/calibration/profile', response_model=CalibrationProfileResponse)
+async def calibration_profile(
+    camera_id: str = Query('default'),
+    source_type: str = Query('lab_camera'),
+) -> CalibrationProfileResponse:
+    inference_service: InferenceService = app.state.inference_service
+    calibrator: ScaleCalibrator = app.state.calibrator
+    resolved_camera_id = inference_service._resolve_camera_id(camera_id=camera_id, source_type=source_type)
+    profile = calibrator.get_profile(resolved_camera_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f'Calibration profile not found for camera_id={resolved_camera_id}.')
+    return CalibrationProfileResponse(**profile)
+
+
+@app.post('/calibration/profile/auto', response_model=CalibrationProfileResponse)
+async def calibration_profile_auto(
+    calibration_image: UploadFile = File(...),
+    camera_id: str = Form('default'),
+    source_type: str = Form('lab_camera'),
+) -> CalibrationProfileResponse:
+    raw = await calibration_image.read()
+    image = decode_image_bytes(raw)
+    if image is None:
+        raise HTTPException(status_code=400, detail='Cannot decode calibration image.')
+
+    inference_service: InferenceService = app.state.inference_service
+    calibrator: ScaleCalibrator = app.state.calibrator
+    resolved_camera_id = inference_service._resolve_camera_id(camera_id=camera_id, source_type=source_type)
+    scale, source = calibrator.calibrate_and_store(image=image, camera_id=resolved_camera_id)
+    if scale is None or source is None:
+        raise HTTPException(
+            status_code=422,
+            detail='Failed to detect valid checkerboard/Charuco on calibration image.',
+        )
+    profile = calibrator.get_profile(resolved_camera_id)
+    if profile is None:
+        profile = {
+            'camera_id': resolved_camera_id,
+            'mm_per_px': float(scale),
+            'validated': True,
+            'fingerprint': '',
+            'calibration_source': str(source),
+            'updated_at': '',
+        }
+    return CalibrationProfileResponse(**profile)
+
+
+@app.post('/calibration/profile/manual', response_model=CalibrationProfileResponse)
+async def calibration_profile_manual(
+    mm_per_px: float = Form(..., gt=0.0, le=2.0),
+    camera_id: str = Form('default'),
+    source_type: str = Form('lab_camera'),
+) -> CalibrationProfileResponse:
+    inference_service: InferenceService = app.state.inference_service
+    calibrator: ScaleCalibrator = app.state.calibrator
+    resolved_camera_id = inference_service._resolve_camera_id(camera_id=camera_id, source_type=source_type)
+    calibrator.upsert_scale(resolved_camera_id, mm_per_px, fingerprint='manual_api')
+    profile = calibrator.get_profile(resolved_camera_id)
+    if profile is None:
+        raise HTTPException(status_code=500, detail='Failed to save calibration profile.')
+    return CalibrationProfileResponse(**profile)
 
 
 @app.post('/auth/register', response_model=TokenResponse)
@@ -752,7 +961,7 @@ async def robustness_stress_test(
         raise HTTPException(status_code=503, detail='Model is not loaded.')
 
     image_bytes = await image.read()
-    img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+    img = decode_image_bytes(image_bytes)
     if img is None:
         raise HTTPException(status_code=400, detail='Cannot decode image.')
 

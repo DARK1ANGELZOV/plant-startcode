@@ -44,6 +44,20 @@ class ActiveLearningSummary(BaseModel):
     queue_items: list[str] = Field(default_factory=list)
 
 
+class CalibrationProfileResponse(BaseModel):
+    camera_id: str
+    mm_per_px: float | None = None
+    validated: bool = False
+    fingerprint: str = ''
+    calibration_source: str = 'cache'
+    updated_at: str = ''
+
+
+class CalibrationProfileListResponse(BaseModel):
+    count: int = 0
+    items: list[CalibrationProfileResponse] = Field(default_factory=list)
+
+
 class PredictResponse(BaseModel):
     run_id: str
     scale_mm_per_px: float

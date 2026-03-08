@@ -15,6 +15,7 @@ from inference.predictor import Detection
 from morphometry.analysis import analyze_mask
 from services.phi_service import PHIService
 from services.storage_service import StorageService
+from utils.image_io import decode_image_bytes
 from utils.schemas import (
     GrowthFrameSummary,
     GrowthTrack,
@@ -175,14 +176,14 @@ class GrowthTrackingService:
 
         calib_img = None
         if calibration_bytes:
-            calib_img = cv2.imdecode(np.frombuffer(calibration_bytes, np.uint8), cv2.IMREAD_COLOR)
+            calib_img = decode_image_bytes(calibration_bytes)
 
         tracker = _SimpleIoUTracker(iou_threshold=float(self.config.get('tracking', {}).get('iou_threshold', 0.3)))
         tracks_buffer: dict[tuple[int, str], list[GrowthTrackPoint]] = {}
         frame_summaries: list[GrowthFrameSummary] = []
 
         for frame_idx, (payload, filename) in enumerate(files):
-            img = cv2.imdecode(np.frombuffer(payload, np.uint8), cv2.IMREAD_COLOR)
+            img = decode_image_bytes(payload)
             if img is None:
                 continue
 

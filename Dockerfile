@@ -15,8 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
+COPY requirements.docker.txt ./
+RUN pip install --upgrade pip && \
+    pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1 && \
+    pip install -r requirements.docker.txt
 
 COPY . .
 

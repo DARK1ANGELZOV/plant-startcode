@@ -1,5 +1,71 @@
 [
   {
+    "version_id": "m_20260308_094102_422cbb",
+    "created_at": "2026-03-08T09:41:02.167131+00:00",
+    "path": "C:\\Users\\Dark_Angel\\Desktop\\ProjectPY\\plants\\agro_ai_system\\models\\best_auto_20260302_124925.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  },
+  {
+    "version_id": "m_20260308_091719_a11bfc",
+    "created_at": "2026-03-08T09:17:19.902708+00:00",
+    "path": "C:\\Users\\Dark_Angel\\Desktop\\ProjectPY\\plants\\agro_ai_system\\models\\best_rootstem_recall_cycle_latest.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  },
+  {
+    "version_id": "m_20260308_091246_069c9c",
+    "created_at": "2026-03-08T09:12:46.559485+00:00",
+    "path": "C:\\Users\\Dark_Angel\\Desktop\\ProjectPY\\plants\\agro_ai_system\\models\\best_max_before_recall_cycle_latest.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  },
+  {
+    "version_id": "m_20260307_204054_7f3220",
+    "created_at": "2026-03-07T20:40:54.137540+00:00",
+    "path": "C:\\Users\\Dark_Angel\\Desktop\\ProjectPY\\plants\\agro_ai_system\\models\\best_candidate_points123_fast_latest.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  },
+  {
+    "version_id": "m_20260307_172247_3d9f28",
+    "created_at": "2026-03-07T17:22:47.895599+00:00",
+    "path": "C:\\Users\\Dark_Angel\\Desktop\\ProjectPY\\plants\\agro_ai_system\\models\\best_max_baseline_20260307_172237.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  },
+  {
+    "version_id": "m_20260307_172107_6c76e5",
+    "created_at": "2026-03-07T17:21:07.732847+00:00",
+    "path": "C:\\Users\\Dark_Angel\\Desktop\\ProjectPY\\plants\\agro_ai_system\\models\\best_max.pt",
+    "metrics": {},
+    "dataset_version": null,
+    "tags": [
+      "auto-registered"
+    ],
+    "source": "startup-bootstrap"
+  },
+  {
     "version_id": "m_20260301_083338_901398",
     "created_at": "2026-03-01T08:33:38.501857+00:00",
     "path": "models/8decbff9f1ea402a9df398a0e458a8ac.pt",

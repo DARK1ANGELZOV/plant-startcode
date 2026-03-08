@@ -1,0 +1,25 @@
+.git
+.gitignore
+.github
+.venv
+.pytest_cache
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Large runtime artifacts mounted as volumes in docker-compose
+data
+models
+outputs
+reports
+external_refs
+
+# Local/editor artifacts
+.idea
+.vscode
+*.log
+*.tmp
+*.swp
+*.swo

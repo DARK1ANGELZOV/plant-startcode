@@ -1,6 +1,30 @@
 ﻿# Agro AI System
 
-Production-ready платформа сегментации и морфометрии растений (Arugula/Wheat) с классами `root`, `stem`, `leaves`.
+Готовая к внедрению платформа сегментации и морфометрии растений (Arugula/Wheat) с классами `root`, `stem`, `leaves`.
+
+## Сильные стороны решения
+
+- Единый продуктовый контур: от загрузки фото и сегментации до морфометрии, рекомендаций и отчетов.
+- Строгая метрическая политика: без валидной калибровки сервис не подменяет реальность «угаданными» миллиметрами.
+- Практичный backend для SaaS: FastAPI + async API + история чатов + auth + batch + очереди задач.
+- Инженерная устойчивость: fallback-сценарии, health-check, логирование, мониторинг (Prometheus/Grafana).
+- Готовность к дообучению: набор скриптов для hard-negative mining, golden-наборов, повторяемых train/eval циклов.
+- Продуктовый UX: chat-like интерфейс, работа как с фото, так и с текстовыми вопросами пользователя.
+
+## Текущий этап продукта
+
+Стадия: **расширенный pre-MVP (демо, близкое к MVP)**.
+
+Что уже готово:
+- полный демо-сценарий (загрузка -> анализ -> ответ -> история);
+- сегментация и морфометрия с контролем достоверности;
+- API, фронтенд, авторизация, хранение истории, экспорт артефактов;
+- инфраструктурная база для пилотов (Docker, мониторинг, фоновые задачи).
+
+Что нужно добить до промышленного SLA:
+- финальная стабилизация метрик качества на целевом домене данных;
+- расширение ручного golden-набора и независимая валидация метрик на полевых кейсах;
+- регламент релизного контроля (авто-гейты + приемочные тесты на реальных сценариях заказчика).
 
 ## Что внутри
 
@@ -109,6 +133,7 @@ docker compose up --build
 - `morphometry.metric_policy.strict_scale_required` - строгий метрический режим.
 - `calibration.board_size`, `calibration.square_size_mm` - геометрия шахматки.
 - `calibration.charuco.*` - параметры ChArUco.
+- `calibration.startup_bootstrap.*` - автокалибровка профилей камеры при запуске API.
 
 ## API (минимум)
 
@@ -117,6 +142,9 @@ docker compose up --build
 - `POST /auth/login`
 - `POST /chat/analyze` - текст + изображение + optional calibration image.
 - `POST /predict/batch` - batch inference.
+- `POST /calibration/profile/auto` - одноразовая калибровка камеры по шахматке/ChArUco.
+- `POST /calibration/profile/manual` - ручная установка проверенного `mm_per_px` для камеры.
+- `GET /calibration/profile` и `GET /calibration/profiles` - просмотр активных профилей калибровки.
 - `GET /models/*` - реестр моделей.
 
 Пример `chat/analyze`:
@@ -128,6 +156,23 @@ curl -X POST "http://localhost:8000/chat/analyze" \
   -F "image=@data/demo/dataset/images/val/wheat_001.png" \
   -F "calibration_image=@data/demo/calibration_board.png"
 ```
+
+Одноразовая калибровка профиля камеры (после этого можно отправлять фото без шахматки):
+
+```bash
+curl -X POST "http://localhost:8000/calibration/profile/auto" \
+  -F "camera_id=lab_camera" \
+  -F "source_type=lab_camera" \
+  -F "calibration_image=@data/demo/calibration_board.png"
+```
+
+Автокалибровка при старте:
+
+- По умолчанию API пытается заполнить `lab_camera` из:
+  - `data/demo/calibration_board.png`
+  - `data/calibration/user_chessboard.png`
+  - `data/calibration/predictor_cloud_calib/raw/source/calib`
+- Настройка: `calibration.startup_bootstrap` в `configs/app.yaml`.
 
 ## Политика измерений (важно)
 
@@ -159,6 +204,78 @@ python -m training.auto_hf_train_pipeline \
   --run-name auto_hf_train_v1 \
   --include-weak-100crops \
   --include-plantseg-lesions
+```
+
+Hard-negative mining + Golden (цель 500) + ручная валидация:
+
+```bash
+# Важно: использовать Python из .venv
+.\.venv\Scripts\python.exe -m training.run_hardneg_golden_pipeline \
+  --python-exe .\.venv\Scripts\python.exe \
+  --model models/best_max.pt \
+  --data-root data/hf_multisource_mega10 \
+  --hard-out data/hard_mined_rootstem_rs_v2 \
+  --train-limit 1000 \
+  --val-limit 300 \
+  --golden-out data/golden_rootstem_500 \
+  --golden-target 500 \
+  --golden-min 300 \
+  --golden-max 500 \
+  --review-out data/golden_rootstem_500_review
+```
+
+2-stage class-aware train (root/stem-first -> mixed):
+
+```bash
+python -m training.train_maximum \
+  --config configs/train_rootstem_2stage_classaware.yaml \
+  --stage1-data data/hf_multisource_rootstem_boost/dataset.yaml \
+  --stage2-data data/hf_multisource_hardmix/dataset.yaml \
+  --name rootstem_classaware_v1 \
+  --no-plots
+```
+
+Единый раннер по пунктам `1,2,3,6,5`:
+
+```bash
+python -m training.run_points_1_2_3_5_6 \
+  --golden-target 500 \
+  --train-name points123_stage \
+  --strict-n 30 \
+  --strict-threshold 0.90 \
+  --lightweight-gate
+```
+
+Release blocker (strict gate + floors по recall/mAP50):
+
+```bash
+python -m training.release_guard_strict \
+  --candidate-model models/best_candidate_points123_latest.pt \
+  --benchmark-data data/hf_multisource_mega10_fast/dataset.yaml \
+  --strict-n 30 \
+  --strict-threshold 0.90 \
+  --lightweight-gate \
+  --auto-deploy
+```
+
+Ручная проверка (CLI):
+
+```bash
+.\.venv\Scripts\python.exe -m training.manual_review_cli \
+  --review-csv data/golden_rootstem_400_review/manual_review.csv \
+  --reviewer expert_1 \
+  --only-pending \
+  --open-files
+```
+
+Сбор финального validated Golden после ручной проверки:
+
+```bash
+.\.venv\Scripts\python.exe -m training.apply_golden_manual_decisions \
+  --review-csv data/golden_rootstem_400_review/manual_review.csv \
+  --source-root data/golden_rootstem_400 \
+  --out data/golden_rootstem_400_validated \
+  --min-approved 300
 ```
 
 Оценка:
@@ -213,6 +330,19 @@ python -m tools.strict_photo_quality_gate \
 
 - Prometheus: `monitoring/prometheus/prometheus.yml`
 - Grafana: `monitoring/grafana/`
+
+## PlantCV (опционально)
+
+В платформу добавлен опциональный post-analysis слой `services/plantcv_service.py`.
+
+- Если `plantcv` установлен, сервис рассчитывает дополнительные признаки маски.
+- Если `plantcv` не установлен, автоматически используется fallback без падения API.
+
+Установка (опционально):
+
+```bash
+pip install plantcv
+```
 
 ## Для экспертов
 

@@ -1,0 +1,35 @@
+﻿seed: 42
+
+stage1:
+  model: models/best_max.pt
+  project: runs/segment
+  epochs: 4
+  batch: 2
+  imgsz: 512
+  device: auto
+  workers: 0
+  amp: true
+  patience: 8
+  optimizer: AdamW
+  lr0: 0.0012
+  lrf: 0.08
+  weight_decay: 0.0005
+  warmup_epochs: 1.0
+  mosaic: 0.25
+  mixup: 0.02
+  hsv_h: 0.02
+  hsv_s: 0.55
+  hsv_v: 0.3
+  degrees: 4.0
+  translate: 0.08
+  scale: 0.18
+  fliplr: 0.5
+  flipud: 0.0
+  cache: false
+
+stage2:
+  enabled: false
+
+export:
+  dynamic: true
+  simplify: true

@@ -13,10 +13,12 @@ from morphometry.analysis import analyze_mask, path_length_between_points
 from services.active_learning_service import ActiveLearningService
 from services.disease_service import DiseaseService
 from services.phi_service import PHIService
+from services.plantcv_service import PlantCVService
 from services.report_service import ReportService
 from services.storage_service import StorageService
 from services.xai_service import XAIService
 from utils.errors import ModelNotLoadedError
+from utils.image_io import decode_image_bytes
 from utils.schemas import PredictResponse
 
 
@@ -35,6 +37,7 @@ class InferenceService:
         history_service=None,
         disease_service: DiseaseService | None = None,
         phi_service: PHIService | None = None,
+        plantcv_service: PlantCVService | None = None,
         xai_service: XAIService | None = None,
         active_learning_service: ActiveLearningService | None = None,
     ) -> None:
@@ -49,6 +52,7 @@ class InferenceService:
         self.phi_service = phi_service or PHIService(
             config.get('morphometry', {}).get('recommendation_thresholds', {})
         )
+        self.plantcv_service = plantcv_service or PlantCVService()
         self.xai_service = xai_service or XAIService()
         al_cfg = config.get('active_learning', {})
         self.active_learning_service = active_learning_service or ActiveLearningService(
@@ -206,6 +210,19 @@ class InferenceService:
         if not vals:
             return 0.0
         return float(np.mean(vals))
+
+    def _resolve_camera_id(self, camera_id: str, source_type: str) -> str:
+        raw_camera = str(camera_id or 'default').strip() or 'default'
+        if raw_camera != 'default':
+            return raw_camera
+
+        cal_cfg = self.config.get('calibration', {})
+        profile_map = cal_cfg.get('default_camera_profiles', {}) or {}
+        src_key = str(source_type or 'unknown').strip().lower()
+        mapped = profile_map.get(src_key) or profile_map.get('default')
+        if isinstance(mapped, str) and mapped.strip():
+            return mapped.strip()
+        return raw_camera
 
     def _detections_trustworthy(self, detections: list[Detection], image_shape: tuple[int, int]) -> bool:
         if not detections:
@@ -663,6 +680,103 @@ class InferenceService:
             'notes': [sharp_label, contrast_label, light_label],
         }
 
+    def _adaptive_inference_params(
+        self,
+        image_quality: dict[str, Any],
+        conf: float | None,
+        iou: float | None,
+        max_det: int | None,
+    ) -> tuple[float | None, float | None, int | None, dict[str, Any]]:
+        adaptive_cfg = self.config.get('inference', {}).get('adaptive_params', {})
+        enabled = bool(adaptive_cfg.get('enabled', True))
+        if not enabled:
+            return conf, iou, max_det, {'enabled': False, 'applied': False, 'reasons': []}
+
+        respect_manual = bool(adaptive_cfg.get('respect_manual_overrides', True))
+        manual_overrides = any(x is not None for x in (conf, iou, max_det))
+        if respect_manual and manual_overrides:
+            return conf, iou, max_det, {
+                'enabled': True,
+                'applied': False,
+                'reasons': ['manual_override'],
+            }
+
+        model_cfg = self.config.get('model', {})
+        base_conf = float(model_cfg.get('conf', 0.08) if conf is None else conf)
+        base_iou = float(model_cfg.get('iou', 0.5) if iou is None else iou)
+        base_max_det = int(model_cfg.get('max_det', 200) if max_det is None else max_det)
+
+        blur_score = float(image_quality.get('blur_score', 0.0))
+        brightness = float(image_quality.get('brightness', 0.0))
+        contrast = float(image_quality.get('contrast', 0.0))
+
+        reasons: list[str] = []
+        if blur_score < float(adaptive_cfg.get('blur_threshold', 55.0)):
+            reasons.append('blur')
+        if brightness < float(adaptive_cfg.get('low_light_threshold', 75.0)):
+            reasons.append('low_light')
+        if brightness > float(adaptive_cfg.get('overexposed_threshold', 210.0)):
+            reasons.append('overexposed')
+        if contrast < float(adaptive_cfg.get('low_contrast_threshold', 30.0)):
+            reasons.append('low_contrast')
+
+        severity = len(reasons)
+        if severity == 0:
+            return base_conf, base_iou, base_max_det, {
+                'enabled': True,
+                'applied': False,
+                'reasons': [],
+                'severity': 0,
+                'params': {
+                    'conf': round(base_conf, 5),
+                    'iou': round(base_iou, 5),
+                    'max_det': int(base_max_det),
+                },
+            }
+
+        hard = severity >= int(adaptive_cfg.get('hard_severity_threshold', 2))
+        conf_mult = float(adaptive_cfg.get('conf_hard_multiplier', 0.72 if hard else 0.9))
+        iou_mult = float(adaptive_cfg.get('iou_hard_multiplier', 0.88 if hard else 0.96))
+        max_det_mult = float(adaptive_cfg.get('max_det_hard_multiplier', 1.5 if hard else 1.2))
+        if not hard:
+            conf_mult = float(adaptive_cfg.get('conf_mild_multiplier', conf_mult))
+            iou_mult = float(adaptive_cfg.get('iou_mild_multiplier', iou_mult))
+            max_det_mult = float(adaptive_cfg.get('max_det_mild_multiplier', max_det_mult))
+
+        tuned_conf = float(np.clip(
+            base_conf * conf_mult,
+            float(adaptive_cfg.get('min_conf', 0.01)),
+            float(adaptive_cfg.get('max_conf', 0.35)),
+        ))
+        tuned_iou = float(np.clip(
+            base_iou * iou_mult,
+            float(adaptive_cfg.get('min_iou', 0.35)),
+            float(adaptive_cfg.get('max_iou', 0.7)),
+        ))
+        tuned_max_det = int(np.clip(
+            int(round(base_max_det * max_det_mult)),
+            int(adaptive_cfg.get('min_max_det', 20)),
+            int(adaptive_cfg.get('max_max_det', 400)),
+        ))
+
+        return tuned_conf, tuned_iou, tuned_max_det, {
+            'enabled': True,
+            'applied': True,
+            'severity': int(severity),
+            'mode': 'hard' if hard else 'mild',
+            'reasons': reasons,
+            'base': {
+                'conf': round(base_conf, 5),
+                'iou': round(base_iou, 5),
+                'max_det': int(base_max_det),
+            },
+            'params': {
+                'conf': round(tuned_conf, 5),
+                'iou': round(tuned_iou, 5),
+                'max_det': int(tuned_max_det),
+            },
+        }
+
     def _apply_metric_logic_checks(
         self,
         measurements: list[dict[str, Any]],
@@ -726,20 +840,24 @@ class InferenceService:
         input_path = run_dir / image_name
         self.storage.save_bytes(input_path, image_bytes)
 
-        main_img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+        main_img = decode_image_bytes(image_bytes)
         if main_img is None:
             raise ValueError('Cannot decode input image.')
 
         calibration_image = None
         if calibration_bytes:
-            calibration_image = cv2.imdecode(np.frombuffer(calibration_bytes, np.uint8), cv2.IMREAD_COLOR)
+            calibration_image = decode_image_bytes(calibration_bytes)
 
-        # Avoid leaking stale cache scale into arbitrary photos when camera_id is generic.
+        requested_camera_id = str(camera_id or 'default')
+        resolved_camera_id = self._resolve_camera_id(requested_camera_id, source_type)
+        # Avoid leaking stale cache scale into arbitrary photos when camera_id/profile is generic.
+        calibration_cfg = self.config.get('calibration', {})
         allow_default_cache = bool(self.config.get('calibration', {}).get('use_cache_for_default_camera', False))
-        use_cache = calibration_image is not None or camera_id != 'default' or allow_default_cache
+        allow_default_profile_cache = bool(calibration_cfg.get('allow_default_profile_cache', True))
+        use_cache = calibration_image is not None or resolved_camera_id != 'default' or allow_default_cache
         scale_mm_per_px, scale_source = self.calibrator.get_scale(
             calibration_image if calibration_image is not None else main_img,
-            camera_id=camera_id,
+            camera_id=resolved_camera_id,
             use_cache=use_cache,
         )
         metric_policy = self.config.get('morphometry', {}).get('metric_policy', {})
@@ -752,8 +870,23 @@ class InferenceService:
         auto_profile_cfg = self.config.get('calibration', {}).get('auto_profile', {})
         auto_profile_enabled = bool(auto_profile_cfg.get('enabled', False)) and (not strict_scale_required)
 
-        cache_is_conditioned = bool(use_cache and camera_id != 'default' and source_type != 'unknown')
+        cache_entry_validated = True
+        if scale_source == 'cache':
+            cache_entry_validated = bool(self.calibrator.is_cache_scale_validated(resolved_camera_id))
+        cache_is_conditioned = bool(
+            use_cache
+            and cache_entry_validated
+            and source_type != 'unknown'
+            and (resolved_camera_id != 'default' or allow_default_profile_cache)
+        )
         calibration_reliable = (scale_source in valid_scale_sources) and (scale_source != 'cache' or cache_is_conditioned)
+        image_quality = self._image_quality(main_img)
+        adaptive_conf, adaptive_iou, adaptive_max_det, adaptive_info = self._adaptive_inference_params(
+            image_quality=image_quality,
+            conf=conf,
+            iou=iou,
+            max_det=max_det,
+        )
 
         class_colors = {
             k: tuple(v)
@@ -767,6 +900,8 @@ class InferenceService:
             0.08,
             float(self.config.get('inference', {}).get('min_confidence_for_measurements', 0.03)),
         )
+        if adaptive_conf is not None:
+            heuristic_emit_conf = max(0.06, min(heuristic_emit_conf, float(adaptive_conf)))
 
         fallback_mode = False
         inference_mode = 'model'
@@ -775,9 +910,9 @@ class InferenceService:
                 image_path=str(input_path),
                 class_colors=class_colors,
                 overlay_alpha=overlay_alpha,
-                conf=conf,
-                iou=iou,
-                max_det=max_det,
+                conf=adaptive_conf,
+                iou=adaptive_iou,
+                max_det=adaptive_max_det,
                 use_ensemble=use_ensemble,
             )
         except (ModelNotLoadedError, RuntimeError, ValueError) as exc:
@@ -922,7 +1057,8 @@ class InferenceService:
             if length_px <= 0.0 or (bbox_major_px >= 6.0 and length_px < 0.25 * bbox_major_px):
                 length_px = bbox_major_px
 
-            mm_allowed = calibration_reliable and measurement_reliable
+            # Real metric conversion depends on scale validity; confidence affects trust, not conversion itself.
+            mm_allowed = calibration_reliable
             record = {
                 'instance_id': det.instance_id,
                 'crop': crop,
@@ -955,7 +1091,7 @@ class InferenceService:
             if trustworthy_for_auto_profile:
                 self.calibrator.update_auto_scale(
                     mm_per_px=scale_mm_per_px,
-                    camera_id=camera_id,
+                    camera_id=resolved_camera_id,
                     source_type=source_type,
                     crop=crop,
                 )
@@ -964,6 +1100,10 @@ class InferenceService:
             image_bgr=main_img,
             detections=yolo_result['detections'],
             measurements=measurements,
+        )
+        plantcv_analysis = self.plantcv_service.analyze(
+            image_bgr=main_img,
+            detections=yolo_result['detections'],
         )
         phi = self.phi_service.evaluate(
             measurements=measurements,
@@ -994,7 +1134,13 @@ class InferenceService:
         measured_classes = {m['class_name'] for m in measurements}
         detected_classes = {d.class_name for d in yolo_result['detections']}
         summary['recognized_structures'] = sorted(measured_classes or detected_classes)
-        summary['image_quality'] = self._image_quality(main_img)
+        summary['image_quality'] = image_quality
+        summary['adaptive_inference'] = adaptive_info
+        summary['inference_params'] = {
+            'conf': float(adaptive_conf) if adaptive_conf is not None else None,
+            'iou': float(adaptive_iou) if adaptive_iou is not None else None,
+            'max_det': int(adaptive_max_det) if adaptive_max_det is not None else None,
+        }
         summary['confidence_by_class'] = {
             cls: round(self._mean_confidence(yolo_result['detections'], cls), 5)
             for cls in sorted(detected_classes)
@@ -1011,8 +1157,12 @@ class InferenceService:
             'root_stem_transition': list(root_to_stem_global) if root_to_stem_global is not None else None,
             'leaf_tip': list(leaf_tip_global) if leaf_tip_global is not None else None,
         }
+        summary['plantcv'] = plantcv_analysis
         summary['inference_mode'] = inference_mode
+        summary['camera_id'] = requested_camera_id
+        summary['calibration_camera_id'] = resolved_camera_id
         summary['calibration_reliable'] = calibration_reliable
+        summary['calibration_cache_validated'] = bool(cache_entry_validated) if scale_source == 'cache' else None
         summary['model_based'] = inference_mode.startswith('model')
         summary['measurements_reliable'] = bool(
             measurements
@@ -1060,7 +1210,7 @@ class InferenceService:
             )
         else:
             summary['calibration_note'] = (
-                'Показаны только ориентировочные мм по fallback-масштабу. Для точных мм добавьте шахматку/линейку/эталон.'
+                'Перевод в мм невозможен без валидной калибровки камеры.'
             )
         recommendations = [
             r.model_dump()
@@ -1085,6 +1235,7 @@ class InferenceService:
             'summary': summary,
             'recommendations': recommendations,
             'disease_analysis': disease_analysis,
+            'plantcv_analysis': plantcv_analysis,
             'phi': phi.model_dump(),
             'explainability': explainability.model_dump(),
             'active_learning': active_learning.model_dump(),
@@ -1109,7 +1260,7 @@ class InferenceService:
                 response,
                 tenant_id=tenant_id,
                 source_type=source_type,
-                camera_id=camera_id,
+                camera_id=resolved_camera_id,
             )
         return response
 

@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import math
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -66,6 +67,10 @@ class ScaleCalibrator:
             return payload if isinstance(payload, dict) else {}
         except Exception:
             return {}
+
+    @staticmethod
+    def _utc_now_iso() -> str:
+        return datetime.now(tz=timezone.utc).isoformat()
 
     def _save_cache(self) -> None:
         self.cache_path.write_text(
@@ -532,8 +537,78 @@ class ScaleCalibrator:
         self._cache[str(camera_id)] = {
             'mm_per_px': float(mm_per_px),
             'fingerprint': str(fingerprint),
+            'validated': True,
+            'updated_at': self._utc_now_iso(),
+            'calibration_source': str(fingerprint).split('_', 1)[0] if str(fingerprint).strip() else 'manual',
         }
         self._save_cache()
+
+    def get_profile(self, camera_id: str) -> dict | None:
+        entry = self._cache.get(str(camera_id))
+        if not isinstance(entry, dict):
+            return None
+        mm_per_px = entry.get('mm_per_px', entry.get('mean_mm_per_px'))
+        if mm_per_px is None:
+            return None
+        try:
+            mm_per_px = float(mm_per_px)
+        except Exception:
+            return None
+        return {
+            'camera_id': str(camera_id),
+            'mm_per_px': mm_per_px,
+            'validated': bool(entry.get('validated', False)) or self.is_cache_scale_validated(str(camera_id)),
+            'fingerprint': str(entry.get('fingerprint', '')),
+            'calibration_source': str(entry.get('calibration_source', 'cache')),
+            'updated_at': str(entry.get('updated_at', '')),
+        }
+
+    def list_profiles(self, validated_only: bool = False) -> list[dict]:
+        rows: list[dict] = []
+        for camera_id, entry in self._cache.items():
+            if not isinstance(entry, dict):
+                continue
+            if str(camera_id).startswith(self.AUTO_PREFIX):
+                continue
+            profile = self.get_profile(str(camera_id))
+            if profile is None:
+                continue
+            if validated_only and (not bool(profile.get('validated', False))):
+                continue
+            rows.append(profile)
+        rows.sort(key=lambda x: (x.get('camera_id') != 'default', str(x.get('camera_id', ''))))
+        return rows
+
+    def is_cache_scale_validated(self, camera_id: str) -> bool:
+        entry = self._cache.get(str(camera_id))
+        if not isinstance(entry, dict):
+            return False
+        if bool(entry.get('validated', False)):
+            return True
+        fp = str(entry.get('fingerprint', '')).strip().lower()
+        # Keep validation conservative: only explicit fit/manual/trusted markers.
+        trusted_prefixes = ('fit_', 'manual', 'trusted_', 'calib_', 'chessboard_', 'charuco_', 'source:')
+        return any(fp.startswith(prefix) for prefix in trusted_prefixes)
+
+    def calibrate_and_store(
+        self,
+        image: Optional[np.ndarray],
+        camera_id: str,
+    ) -> tuple[Optional[float], Optional[str]]:
+        scale, source = self.estimate_scale(image)
+        if scale is None or source is None:
+            return None, None
+        fp_raw = self._image_fingerprint(image) if image is not None else 'none'
+        fingerprint = f'{source}_{fp_raw}'
+        self._cache[str(camera_id)] = {
+            'mm_per_px': float(scale),
+            'fingerprint': fingerprint,
+            'validated': True,
+            'updated_at': self._utc_now_iso(),
+            'calibration_source': str(source),
+        }
+        self._save_cache()
+        return float(scale), str(source)
 
     def estimate_scale(self, image: Optional[np.ndarray]) -> tuple[Optional[float], Optional[str]]:
         if image is None:
@@ -555,15 +630,9 @@ class ScaleCalibrator:
         camera_id: str = 'default',
         use_cache: bool = True,
     ) -> tuple[float, str]:
-        scale, source = self.estimate_scale(image)
+        scale, source = self.calibrate_and_store(image=image, camera_id=camera_id)
         if scale is not None and source is not None:
-            fp = self._image_fingerprint(image) if image is not None else 'none'
-            self._cache[camera_id] = {
-                'mm_per_px': scale,
-                'fingerprint': fp,
-            }
-            self._save_cache()
-            return scale, source
+            return float(scale), str(source)
 
         if use_cache and camera_id in self._cache:
             return float(self._cache[camera_id]['mm_per_px']), 'cache'

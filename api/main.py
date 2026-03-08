@@ -326,6 +326,14 @@ async def startup_event() -> None:
         auto_min_samples=int(config.get('calibration', {}).get('auto_profile', {}).get('min_samples', 3)),
         auto_stable_samples=int(config.get('calibration', {}).get('auto_profile', {}).get('stable_samples', 8)),
         auto_max_cv=float(config.get('calibration', {}).get('auto_profile', {}).get('max_cv', 0.35)),
+        scene_aware_cache_enabled=bool(config.get('calibration', {}).get('scene_aware_cache', {}).get('enabled', True)),
+        scene_hash_size=int(config.get('calibration', {}).get('scene_aware_cache', {}).get('hash_size', 8)),
+        scene_max_hamming_distance=int(
+            config.get('calibration', {}).get('scene_aware_cache', {}).get('max_hamming_distance', 4)
+        ),
+        allow_legacy_cache_without_scene=bool(
+            config.get('calibration', {}).get('scene_aware_cache', {}).get('allow_legacy_cache_without_scene', False)
+        ),
     )
     _bootstrap_calibration_profiles(config=config, calibrator=calibrator)
     history_service = RunHistoryService(
@@ -630,6 +638,20 @@ async def list_chat_sessions(
     user = _resolve_user_from_auth_header(db, authorization, required=True)
     chat_service: ChatService = app.state.chat_service
     return chat_service.list_sessions(db, user_id=user.id, limit=limit)
+
+
+@app.delete('/chat/sessions/{session_id}')
+async def delete_chat_session(
+    session_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = _resolve_user_from_auth_header(db, authorization, required=True)
+    chat_service: ChatService = app.state.chat_service
+    removed = chat_service.delete_session(db, user_id=user.id, session_id=session_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail='Chat session not found.')
+    return {'status': 'deleted', 'session_id': session_id}
 
 
 @app.get('/chat/sessions/{session_id}/messages', response_model=list[ChatMessageResponse])

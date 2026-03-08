@@ -1,5 +1,70 @@
 [
   {
+    "version_id": "m_20260308_210701_b463a3",
+    "created_at": "2026-03-08T21:07:01.015957+00:00",
+    "path": "models/a83fa07e2c8b4d46bad20484cf6eebad.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260308_210600_ad1843",
+    "created_at": "2026-03-08T21:06:00.079892+00:00",
+    "path": "models/ab34b27783a0442da3e9ceaa04ca293a.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260308_201159_f61438",
+    "created_at": "2026-03-08T20:11:59.096095+00:00",
+    "path": "models/40f83b2220674bceb1bc754cb078a6ba.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260308_200925_2cd213",
+    "created_at": "2026-03-08T20:09:25.839905+00:00",
+    "path": "models/dc3c4dfb198c4984a4748d2dc19f24b8.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
+    "version_id": "m_20260308_194702_abe579",
+    "created_at": "2026-03-08T19:47:02.961655+00:00",
+    "path": "models/9ceac1060f56464381935c29eca44b6f.pt",
+    "metrics": {
+      "map50": 0.77
+    },
+    "dataset_version": "v-test",
+    "tags": [
+      "test"
+    ],
+    "source": "pytest"
+  },
+  {
     "version_id": "m_20260308_094102_422cbb",
     "created_at": "2026-03-08T09:41:02.167131+00:00",
     "path": "C:\\Users\\Dark_Angel\\Desktop\\ProjectPY\\plants\\agro_ai_system\\models\\best_auto_20260302_124925.pt",

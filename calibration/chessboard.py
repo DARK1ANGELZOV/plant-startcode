@@ -35,6 +35,10 @@ class ScaleCalibrator:
         auto_min_samples: int = 3,
         auto_stable_samples: int = 8,
         auto_max_cv: float = 0.35,
+        scene_aware_cache_enabled: bool = True,
+        scene_hash_size: int = 8,
+        scene_max_hamming_distance: int = 4,
+        allow_legacy_cache_without_scene: bool = False,
     ) -> None:
         self.cache_path = Path(cache_path)
         self.default_mm_per_px = float(default_mm_per_px)
@@ -55,6 +59,10 @@ class ScaleCalibrator:
         self.auto_min_samples = max(1, int(auto_min_samples))
         self.auto_stable_samples = max(self.auto_min_samples, int(auto_stable_samples))
         self.auto_max_cv = max(0.01, float(auto_max_cv))
+        self.scene_aware_cache_enabled = bool(scene_aware_cache_enabled)
+        self.scene_hash_size = max(4, int(scene_hash_size))
+        self.scene_max_hamming_distance = max(0, int(scene_max_hamming_distance))
+        self.allow_legacy_cache_without_scene = bool(allow_legacy_cache_without_scene)
 
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._cache = self._load_cache()
@@ -81,6 +89,112 @@ class ScaleCalibrator:
     @staticmethod
     def _image_fingerprint(image: np.ndarray) -> str:
         return hashlib.sha1(image.tobytes()).hexdigest()[:12]
+
+    def _scene_signature(self, image: Optional[np.ndarray]) -> Optional[str]:
+        if image is None:
+            return None
+        try:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+            # Reduce plant/content influence: hash mostly capture setup/background, not object in center.
+            hh, ww = gray.shape[:2]
+            if hh >= 20 and ww >= 20:
+                y1, y2 = int(hh * 0.22), int(hh * 0.78)
+                x1, x2 = int(ww * 0.22), int(ww * 0.78)
+                fill = int(np.median(gray))
+                gray = gray.copy()
+                gray[y1:y2, x1:x2] = fill
+            h = self.scene_hash_size
+            resized = cv2.resize(gray, (h + 1, h), interpolation=cv2.INTER_AREA)
+            diff = resized[:, 1:] > resized[:, :-1]
+            bits = ''.join('1' if x else '0' for x in diff.flatten().tolist())
+            value = int(bits, 2)
+            hex_len = (len(bits) + 3) // 4
+            return f'dhash{h}:{value:0{hex_len}x}'
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_scene_signature(sig: str) -> tuple[Optional[int], Optional[int]]:
+        raw = str(sig or '').strip().lower()
+        if not raw:
+            return None, None
+        if ':' in raw:
+            prefix, payload = raw.split(':', 1)
+            payload = payload.strip()
+            bits = None
+            if prefix.startswith('dhash'):
+                try:
+                    h = int(prefix.replace('dhash', '').strip())
+                    bits = h * h
+                except Exception:
+                    bits = None
+            try:
+                return int(payload, 16), bits
+            except Exception:
+                return None, None
+        try:
+            val = int(raw, 16)
+            return val, len(raw) * 4
+        except Exception:
+            return None, None
+
+    def _scene_hamming_distance(self, a: str, b: str) -> Optional[int]:
+        va, ba = self._parse_scene_signature(a)
+        vb, bb = self._parse_scene_signature(b)
+        if va is None or vb is None:
+            return None
+        bits = max(int(ba or 0), int(bb or 0), self.scene_hash_size * self.scene_hash_size)
+        if bits <= 0:
+            bits = self.scene_hash_size * self.scene_hash_size
+        mask = (1 << bits) - 1
+        return int(((va ^ vb) & mask).bit_count())
+
+    def _resolve_scene_cached_scale(self, camera_id: str, image: Optional[np.ndarray]) -> tuple[Optional[float], Optional[str]]:
+        entry = self._cache.get(str(camera_id))
+        if not isinstance(entry, dict):
+            return None, None
+
+        def _safe_positive(value: object) -> Optional[float]:
+            try:
+                val = float(value)
+            except Exception:
+                return None
+            if (not math.isfinite(val)) or val <= 0.0:
+                return None
+            return val
+
+        scene_sig = self._scene_signature(image)
+        scene_scales = entry.get('scene_scales')
+        if isinstance(scene_scales, dict) and scene_sig:
+            exact = scene_scales.get(scene_sig)
+            if isinstance(exact, dict):
+                val = _safe_positive(exact.get('mm_per_px'))
+                if val is not None:
+                    return float(val), 'cache_scene'
+
+            best_val = None
+            best_dist = None
+            for sig_key, payload in scene_scales.items():
+                if not isinstance(payload, dict):
+                    continue
+                val = _safe_positive(payload.get('mm_per_px'))
+                if val is None:
+                    continue
+                dist = self._scene_hamming_distance(scene_sig, str(sig_key))
+                if dist is None:
+                    continue
+                if best_dist is None or dist < best_dist:
+                    best_dist = dist
+                    best_val = val
+            if best_val is not None and best_dist is not None and best_dist <= self.scene_max_hamming_distance:
+                return float(best_val), 'cache_scene_near'
+            return None, None
+
+        if self.allow_legacy_cache_without_scene:
+            val = _safe_positive(entry.get('mm_per_px', entry.get('mean_mm_per_px')))
+            if val is not None:
+                return float(val), 'cache'
+        return None, None
 
     @staticmethod
     def _normalize_token(value: str) -> str:
@@ -352,7 +466,10 @@ class ScaleCalibrator:
                 | cv2.CALIB_CB_NORMALIZE_IMAGE
                 | cv2.CALIB_CB_FAST_CHECK
             )
-            found, corners = cv2.findChessboardCorners(img_gray, board_size, flags_fast)
+            try:
+                found, corners = cv2.findChessboardCorners(img_gray, board_size, flags_fast)
+            except cv2.error:
+                found, corners = False, None
             if found and corners is not None:
                 term = (
                     cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER,
@@ -533,14 +650,47 @@ class ScaleCalibrator:
 
         return self._robust_mm_per_px(distances, self.charuco_square_size_mm)
 
-    def upsert_scale(self, camera_id: str, mm_per_px: float, fingerprint: str = 'manual') -> None:
-        self._cache[str(camera_id)] = {
-            'mm_per_px': float(mm_per_px),
-            'fingerprint': str(fingerprint),
-            'validated': True,
-            'updated_at': self._utc_now_iso(),
-            'calibration_source': str(fingerprint).split('_', 1)[0] if str(fingerprint).strip() else 'manual',
-        }
+    def upsert_scale(
+        self,
+        camera_id: str,
+        mm_per_px: float,
+        fingerprint: str = 'manual',
+        scene_signature: Optional[str] = None,
+    ) -> None:
+        key = str(camera_id)
+        entry = self._cache.get(key, {})
+        if not isinstance(entry, dict):
+            entry = {}
+        ts = self._utc_now_iso()
+        scene_scales = entry.get('scene_scales')
+        if not isinstance(scene_scales, dict):
+            scene_scales = {}
+        if scene_signature:
+            scene_scales[str(scene_signature)] = {
+                'mm_per_px': float(mm_per_px),
+                'fingerprint': str(fingerprint),
+                'validated': True,
+                'updated_at': ts,
+                'calibration_source': str(fingerprint).split('_', 1)[0] if str(fingerprint).strip() else 'manual',
+            }
+        entry.update(
+            {
+                'mm_per_px': float(mm_per_px),
+                'fingerprint': str(fingerprint),
+                'validated': True,
+                'updated_at': ts,
+                'calibration_source': str(fingerprint).split('_', 1)[0] if str(fingerprint).strip() else 'manual',
+            }
+        )
+        if scene_signature:
+            entry['scene_signature'] = str(scene_signature)
+        if scene_scales:
+            if len(scene_scales) > 64:
+                keys = sorted(scene_scales.keys())
+                for stale in keys[: len(scene_scales) - 64]:
+                    scene_scales.pop(stale, None)
+            entry['scene_scales'] = scene_scales
+        self._cache[key] = entry
         self._save_cache()
 
     def get_profile(self, camera_id: str) -> dict | None:
@@ -561,6 +711,8 @@ class ScaleCalibrator:
             'fingerprint': str(entry.get('fingerprint', '')),
             'calibration_source': str(entry.get('calibration_source', 'cache')),
             'updated_at': str(entry.get('updated_at', '')),
+            'scene_signature': str(entry.get('scene_signature', '')),
+            'scene_entries': int(len(entry.get('scene_scales', {}))) if isinstance(entry.get('scene_scales'), dict) else 0,
         }
 
     def list_profiles(self, validated_only: bool = False) -> list[dict]:
@@ -600,13 +752,41 @@ class ScaleCalibrator:
             return None, None
         fp_raw = self._image_fingerprint(image) if image is not None else 'none'
         fingerprint = f'{source}_{fp_raw}'
-        self._cache[str(camera_id)] = {
-            'mm_per_px': float(scale),
-            'fingerprint': fingerprint,
-            'validated': True,
-            'updated_at': self._utc_now_iso(),
-            'calibration_source': str(source),
-        }
+        key = str(camera_id)
+        entry = self._cache.get(key, {})
+        if not isinstance(entry, dict):
+            entry = {}
+        scene_scales = entry.get('scene_scales')
+        if not isinstance(scene_scales, dict):
+            scene_scales = {}
+        ts = self._utc_now_iso()
+        scene_signature = self._scene_signature(image)
+        if scene_signature:
+            scene_scales[str(scene_signature)] = {
+                'mm_per_px': float(scale),
+                'fingerprint': fingerprint,
+                'validated': True,
+                'updated_at': ts,
+                'calibration_source': str(source),
+            }
+        entry.update(
+            {
+                'mm_per_px': float(scale),
+                'fingerprint': fingerprint,
+                'validated': True,
+                'updated_at': ts,
+                'calibration_source': str(source),
+            }
+        )
+        if scene_signature:
+            entry['scene_signature'] = str(scene_signature)
+        if scene_scales:
+            if len(scene_scales) > 64:
+                keys = sorted(scene_scales.keys())
+                for stale in keys[: len(scene_scales) - 64]:
+                    scene_scales.pop(stale, None)
+            entry['scene_scales'] = scene_scales
+        self._cache[key] = entry
         self._save_cache()
         return float(scale), str(source)
 
@@ -614,11 +794,19 @@ class ScaleCalibrator:
         if image is None:
             return None, None
 
-        scale = self._estimate_scale_from_chessboard(image)
+        try:
+            scale = self._estimate_scale_from_chessboard(image)
+        except Exception as exc:
+            logger.warning('Chessboard scale estimation failed: %s', exc)
+            scale = None
         if scale is not None:
             return scale, 'chessboard'
 
-        scale_charuco = self._estimate_scale_from_charuco(image)
+        try:
+            scale_charuco = self._estimate_scale_from_charuco(image)
+        except Exception as exc:
+            logger.warning('Charuco scale estimation failed: %s', exc)
+            scale_charuco = None
         if scale_charuco is not None:
             return scale_charuco, 'charuco'
 
@@ -630,12 +818,32 @@ class ScaleCalibrator:
         camera_id: str = 'default',
         use_cache: bool = True,
     ) -> tuple[float, str]:
-        scale, source = self.calibrate_and_store(image=image, camera_id=camera_id)
+        try:
+            scale, source = self.calibrate_and_store(image=image, camera_id=camera_id)
+        except Exception as exc:
+            logger.warning(
+                'Calibration pipeline raised exception for camera_id=%s; using cache/default fallback. Error: %s',
+                camera_id,
+                exc,
+            )
+            scale, source = None, None
         if scale is not None and source is not None:
             return float(scale), str(source)
 
-        if use_cache and camera_id in self._cache:
-            return float(self._cache[camera_id]['mm_per_px']), 'cache'
+        if use_cache and str(camera_id) in self._cache:
+            if self.scene_aware_cache_enabled:
+                scene_scale, scene_source = self._resolve_scene_cached_scale(camera_id=str(camera_id), image=image)
+                if scene_scale is not None and scene_source is not None:
+                    return float(scene_scale), str(scene_source)
+                logger.info(
+                    'Scene-aware cache rejected: camera_id=%s (scene mismatch or scene profile missing).',
+                    camera_id,
+                )
+            else:
+                try:
+                    return float(self._cache[str(camera_id)]['mm_per_px']), 'cache'
+                except Exception:
+                    pass
 
         logger.debug('Calibration fallback used for camera_id=%s', camera_id)
         return self.default_mm_per_px, 'fallback'

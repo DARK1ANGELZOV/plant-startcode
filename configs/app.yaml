@@ -111,7 +111,8 @@ morphometry:
     valid_scale_sources:
     - chessboard
     - charuco
-    - cache
+    - cache_scene
+    - cache_scene_near
   recommendation_thresholds:
     Arugula:
       min_root_length_mm: 18.0
@@ -148,6 +149,11 @@ calibration:
   cache_path: calibration/scale_cache.json
   use_cache_for_default_camera: true
   allow_default_profile_cache: true
+  scene_aware_cache:
+    enabled: true
+    hash_size: 8
+    max_hamming_distance: 4
+    allow_legacy_cache_without_scene: false
   default_camera_profiles:
     lab_camera: lab_camera
     phone_camera: phone_user
@@ -200,6 +206,7 @@ chat_reply:
   max_recommendations: 2
   max_quality_notes: 1
   include_px_fallback: true
+  use_prior_feedback: false
 queue:
   redis_url: redis://redis:6379/0
 tracking:

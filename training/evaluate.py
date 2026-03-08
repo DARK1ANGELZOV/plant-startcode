@@ -2,8 +2,16 @@
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 from typing import Any
+
+# Workaround for Windows environments where a compatible torch build is installed
+# in a short custom site-packages path (e.g. C:\ptpkgs).
+_extra_site = os.getenv('AGRO_EXTRA_SITE_PACKAGES', r'C:\ptpkgs').strip()
+if _extra_site and os.path.isdir(_extra_site) and _extra_site not in sys.path:
+    sys.path.insert(0, _extra_site)
 
 from ultralytics import YOLO
 

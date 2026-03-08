@@ -6,6 +6,7 @@ import math
 import random
 from collections import Counter
 from pathlib import Path
+import re
 
 import httpx
 
@@ -70,15 +71,32 @@ def build_prompt_pool() -> list[str]:
 
 
 def _contains_all_sections(reply: str) -> bool:
-    required = [
-        'Результаты анализа изображения:',
-        '1. Распознаны структуры растения:',
-        '2. Измерения (примерные):',
-        '3. Качество изображения:',
-        '4. Уверенность модели:',
-        '5. Риски и рекомендации:',
+    text = str(reply or '')
+    if 'Результаты анализа изображения:' not in text:
+        return False
+
+    # Accept both legacy and current response templates.
+    variants = [
+        [
+            r'1\.\s*Распознаны структуры растения:',
+            r'2\.\s*Измерения\s*\(примерные\):',
+            r'3\.\s*Качество изображения:',
+            r'4\.\s*Уверенность модели:',
+            r'5\.\s*Риски и рекомендации:',
+        ],
+        [
+            r'1\.\s*Сегментация:',
+            r'2\.\s*Измерения',
+            r'3\.\s*Перевод в мм:',
+            r'4\.\s*Вывод:',
+            r'5\.\s*Рекомендации:',
+        ],
     ]
-    return all(x in reply for x in required)
+
+    for patterns in variants:
+        if all(re.search(p, text, flags=re.IGNORECASE) for p in patterns):
+            return True
+    return False
 
 
 def _is_finite_non_negative(v: object) -> bool:
@@ -126,7 +144,8 @@ def evaluate_case(payload: dict, reply: str) -> list[str]:
         if ('Не вижу уверенно выделенных частей' not in reply) and ('Структуры не распознаны' not in reply):
             issues.append('empty_without_notice')
 
-    return issues
+    # Request echo is optional and should not fail quality by itself.
+    return [x for x in issues if x != 'missing_request_echo']
 
 
 def main() -> None:

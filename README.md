@@ -36,7 +36,7 @@
   - строгая метрическая политика (без «фейковых» мм при ненадежном масштабе).
 - Калибровка:
   - chessboard (`findChessboardCorners` / SB), ChArUco;
-  - cache + auto-profile;
+  - scene-aware cache (масштаб применяется только при совпадении сцены) + auto-profile;
   - отдельный benchmark по `mm_per_px`.
 - Продуктовые функции:
   - chat-like frontend;
@@ -157,7 +157,7 @@ curl -X POST "http://localhost:8000/chat/analyze" \
   -F "calibration_image=@data/demo/calibration_board.png"
 ```
 
-Одноразовая калибровка профиля камеры (после этого можно отправлять фото без шахматки):
+Одноразовая калибровка профиля камеры/сцены:
 
 ```bash
 curl -X POST "http://localhost:8000/calibration/profile/auto" \
@@ -176,7 +176,8 @@ curl -X POST "http://localhost:8000/calibration/profile/auto" \
 
 ## Политика измерений (важно)
 
-- Конвертация `px -> mm` разрешена только при валидном источнике масштаба (`chessboard` / `charuco` / доверенный cache).
+- Конвертация `px -> mm` разрешена только при валидном источнике масштаба (`chessboard` / `charuco` / `cache_scene*`).
+- Глобальный cache без совпадения сцены не используется (защита от неверных мм на новых кадрах).
 - Если валидного масштаба нет, длины остаются в `px`, а мм помечаются как недоступные/приблизительные по политике.
 - В strict режиме адаптивный «угаданный» масштаб не используется.
 

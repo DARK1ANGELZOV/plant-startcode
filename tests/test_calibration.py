@@ -29,6 +29,7 @@ def test_cache_used_when_no_new_chessboard(tmp_path: Path) -> None:
         default_mm_per_px=0.2,
         board_size=(7, 7),
         square_size_mm=5.0,
+        scene_aware_cache_enabled=False,
     )
     image = np.zeros((100, 100, 3), dtype=np.uint8)
     scale, source = calibrator.get_scale(image, camera_id='cam_b')
@@ -45,6 +46,7 @@ def test_cache_can_be_disabled(tmp_path: Path) -> None:
         default_mm_per_px=0.2,
         board_size=(7, 7),
         square_size_mm=5.0,
+        scene_aware_cache_enabled=False,
     )
     image = np.zeros((100, 100, 3), dtype=np.uint8)
     scale, source = calibrator.get_scale(image, camera_id='cam_b', use_cache=False)
@@ -59,11 +61,40 @@ def test_upsert_scale_updates_cache(tmp_path: Path) -> None:
         default_mm_per_px=0.2,
         board_size=(7, 7),
         square_size_mm=5.0,
+        allow_legacy_cache_without_scene=True,
     )
     calibrator.upsert_scale('cam_custom', 0.1234, fingerprint='fit')
     scale, source = calibrator.get_scale(None, camera_id='cam_custom', use_cache=True)
     assert abs(scale - 0.1234) < 1e-8
     assert source == 'cache'
+
+
+def test_scene_aware_cache_rejects_other_scene(tmp_path: Path) -> None:
+    cache_file = tmp_path / 'scale_cache.json'
+    calibrator = ScaleCalibrator(
+        cache_path=str(cache_file),
+        default_mm_per_px=0.2,
+        board_size=(7, 7),
+        square_size_mm=5.0,
+        scene_aware_cache_enabled=True,
+        allow_legacy_cache_without_scene=False,
+    )
+    img_a = np.zeros((120, 120, 3), dtype=np.uint8)
+    cv2.rectangle(img_a, (20, 20), (100, 100), (255, 255, 255), -1)
+    img_b = np.zeros((120, 120, 3), dtype=np.uint8)
+    cv2.circle(img_b, (60, 60), 35, (255, 255, 255), -1)
+
+    sig_a = calibrator._scene_signature(img_a)
+    assert sig_a is not None
+    calibrator.upsert_scale('cam_scene', 0.1234, fingerprint='manual_api', scene_signature=sig_a)
+
+    scale_ok, source_ok = calibrator.get_scale(img_a, camera_id='cam_scene', use_cache=True)
+    assert abs(scale_ok - 0.1234) < 1e-8
+    assert source_ok in {'cache_scene', 'cache_scene_near'}
+
+    scale_miss, source_miss = calibrator.get_scale(img_b, camera_id='cam_scene', use_cache=True)
+    assert abs(scale_miss - 0.2) < 1e-8
+    assert source_miss == 'fallback'
 
 
 def test_estimate_scale_none_image() -> None:
@@ -137,10 +168,14 @@ def test_calibrate_and_store_marks_cache_as_validated(tmp_path: Path) -> None:
     assert scale is not None
     assert calibrator.is_cache_scale_validated('lab_camera') is True
 
-    no_board = np.zeros((120, 120, 3), dtype=np.uint8)
-    cached_scale, cached_source = calibrator.get_scale(no_board, camera_id='lab_camera', use_cache=True)
-    assert cached_source == 'cache'
+    cached_scale, cached_source = calibrator.get_scale(image, camera_id='lab_camera', use_cache=True)
+    assert cached_source in {'chessboard', 'cache_scene', 'cache_scene_near'}
     assert abs(float(cached_scale) - float(scale)) < 1e-6
+
+    no_board = np.zeros((120, 120, 3), dtype=np.uint8)
+    fallback_scale, fallback_source = calibrator.get_scale(no_board, camera_id='lab_camera', use_cache=True)
+    assert fallback_source == 'fallback'
+    assert abs(float(fallback_scale) - 0.2) < 1e-8
 
 
 def test_list_profiles_skips_auto_profile_keys(tmp_path: Path) -> None:

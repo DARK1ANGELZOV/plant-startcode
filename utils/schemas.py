@@ -51,6 +51,8 @@ class CalibrationProfileResponse(BaseModel):
     fingerprint: str = ''
     calibration_source: str = 'cache'
     updated_at: str = ''
+    scene_signature: str = ''
+    scene_entries: int = 0
 
 
 class CalibrationProfileListResponse(BaseModel):

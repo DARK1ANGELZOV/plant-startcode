@@ -863,23 +863,30 @@ class InferenceService:
         metric_policy = self.config.get('morphometry', {}).get('metric_policy', {})
         strict_scale_required = bool(metric_policy.get('strict_scale_required', True))
         valid_scale_sources = {
-            str(x) for x in metric_policy.get('valid_scale_sources', ['chessboard', 'charuco', 'cache'])
+            str(x) for x in metric_policy.get('valid_scale_sources', ['chessboard', 'charuco', 'cache_scene', 'cache_scene_near'])
         }
         min_reliable_conf = float(metric_policy.get('min_confidence_for_reliable_measurements', 0.7))
         allow_adaptive_scale = bool(self.config.get('morphometry', {}).get('adaptive_scale', {}).get('enabled', False))
         auto_profile_cfg = self.config.get('calibration', {}).get('auto_profile', {})
         auto_profile_enabled = bool(auto_profile_cfg.get('enabled', False)) and (not strict_scale_required)
 
+        cache_like_source = str(scale_source).startswith('cache')
         cache_entry_validated = True
-        if scale_source == 'cache':
+        if cache_like_source:
             cache_entry_validated = bool(self.calibrator.is_cache_scale_validated(resolved_camera_id))
+        cache_scene_matched = str(scale_source).startswith('cache_scene')
         cache_is_conditioned = bool(
             use_cache
             and cache_entry_validated
-            and source_type != 'unknown'
-            and (resolved_camera_id != 'default' or allow_default_profile_cache)
+            and (
+                cache_scene_matched
+                or (
+                    source_type != 'unknown'
+                    and (resolved_camera_id != 'default' or allow_default_profile_cache)
+                )
+            )
         )
-        calibration_reliable = (scale_source in valid_scale_sources) and (scale_source != 'cache' or cache_is_conditioned)
+        calibration_reliable = (scale_source in valid_scale_sources) and ((not cache_like_source) or cache_is_conditioned)
         image_quality = self._image_quality(main_img)
         adaptive_conf, adaptive_iou, adaptive_max_det, adaptive_info = self._adaptive_inference_params(
             image_quality=image_quality,
@@ -1162,7 +1169,7 @@ class InferenceService:
         summary['camera_id'] = requested_camera_id
         summary['calibration_camera_id'] = resolved_camera_id
         summary['calibration_reliable'] = calibration_reliable
-        summary['calibration_cache_validated'] = bool(cache_entry_validated) if scale_source == 'cache' else None
+        summary['calibration_cache_validated'] = bool(cache_entry_validated) if cache_like_source else None
         summary['model_based'] = inference_mode.startswith('model')
         summary['measurements_reliable'] = bool(
             measurements
@@ -1182,7 +1189,7 @@ class InferenceService:
         summary['mm_conversion_possible'] = bool(calibration_reliable)
         summary['mm_per_pixel'] = float(scale_mm_per_px) if calibration_reliable else None
         summary['calibration_source'] = str(scale_source) if calibration_reliable else None
-        cal_error_map = {'chessboard': 3.0, 'charuco': 3.5, 'cache': 6.0}
+        cal_error_map = {'chessboard': 3.0, 'charuco': 3.5, 'cache': 6.0, 'cache_scene': 4.5, 'cache_scene_near': 5.0}
         summary['calibration_error_pct'] = cal_error_map.get(str(scale_source).split('+')[0]) if calibration_reliable else None
 
         if inference_mode in {'model_unavailable', 'model_low_confidence', 'model_no_detections'}:

@@ -220,23 +220,30 @@ def main() -> None:
     print('Validation metrics:')
     print(json.dumps(metrics, indent=2))
 
-    onnx_path = final_model.export(
-        format='onnx',
-        dynamic=bool(export_cfg.get('onnx_dynamic', True)),
-        simplify=bool(export_cfg.get('simplify', True)),
-        imgsz=int(train_cfg['imgsz']),
-    )
-    print(f'ONNX exported to: {onnx_path}')
-
     models_dir = Path('models')
     models_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(best_path, models_dir / 'best.pt')
 
-    onnx_src = Path(str(onnx_path))
-    if onnx_src.exists():
-        shutil.copy2(onnx_src, models_dir / 'best.onnx')
+    onnx_path: str | None = None
+    try:
+        onnx_path = str(
+            final_model.export(
+                format='onnx',
+                dynamic=bool(export_cfg.get('onnx_dynamic', True)),
+                simplify=bool(export_cfg.get('simplify', True)),
+                imgsz=int(train_cfg['imgsz']),
+            )
+        )
+        print(f'ONNX exported to: {onnx_path}')
+    except Exception as exc:
+        print(f'WARNING: ONNX export failed, continuing with best.pt only: {exc}')
 
-    print('Artifacts copied to models/: best.pt and best.onnx')
+    if onnx_path:
+        onnx_src = Path(str(onnx_path))
+        if onnx_src.exists():
+            shutil.copy2(onnx_src, models_dir / 'best.onnx')
+
+    print('Artifacts copied to models/: best.pt' + (' and best.onnx' if onnx_path else ''))
 
 
 if __name__ == '__main__':

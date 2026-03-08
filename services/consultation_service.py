@@ -134,7 +134,10 @@ class ConsultationService:
 
     @classmethod
     def _normalize(cls, text: str) -> str:
-        return " ".join((text or "").strip().lower().split())
+        normalized = " ".join((text or "").strip().lower().split())
+        normalized = re.sub(r"[,!.;:\"'`()\\[\\]{}]+", " ", normalized)
+        normalized = re.sub(r"\\s+", " ", normalized).strip()
+        return normalized
 
     @classmethod
     def _tokenize(cls, text: str) -> list[str]:

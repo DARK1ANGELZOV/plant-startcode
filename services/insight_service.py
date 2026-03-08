@@ -17,6 +17,8 @@ class InsightService:
         self.max_recommendations = max(1, int(cfg.get('max_recommendations', 3)))
         self.max_quality_notes = max(1, int(cfg.get('max_quality_notes', 2)))
         self.include_px_fallback = bool(cfg.get('include_px_fallback', True))
+        # Runtime can disable this in config to keep replies deterministic across guest/auth modes.
+        self.use_prior_feedback = bool(cfg.get('use_prior_feedback', True))
 
     @staticmethod
     def _class_ru_name(class_name: str) -> str:
@@ -164,7 +166,7 @@ class InsightService:
         conf_by_class = summary.get('confidence_by_class') or {}
         trust_score = float(summary.get('measurement_trust_score', 0.0))
         trust_level = str(summary.get('measurement_trust_level', 'low'))
-        feedback_state = self._feedback_state(prior_context)
+        feedback_state = self._feedback_state(prior_context) if self.use_prior_feedback else 'none'
         min_conf = max(0.0, min(1.0, float(self.min_confidence_for_numeric)))
 
         mm_lines, has_real_mm = self._real_mm_block(result=result, summary=summary)

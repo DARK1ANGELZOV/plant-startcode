@@ -27,12 +27,20 @@ class ChatService:
         return [
             ChatSessionResponse(
                 id=row.id,
-                title=row.title,
+                title=self._normalize_ru_text(row.title),
                 created_at=self._as_iso(row.created_at),
                 updated_at=self._as_iso(row.updated_at),
             )
             for row in rows
         ]
+
+    def delete_session(self, db: Session, user_id: int, session_id: int) -> bool:
+        session = self.get_session(db, user_id=user_id, session_id=session_id)
+        if session is None:
+            return False
+        db.delete(session)
+        db.commit()
+        return True
 
     def get_session(self, db: Session, user_id: int | None, session_id: int, allow_any: bool = False) -> ChatSession | None:
         query = select(ChatSession).where(ChatSession.id == session_id)
@@ -90,7 +98,7 @@ class ChatService:
             ChatMessageResponse(
                 id=row.id,
                 role=row.role,
-                content=row.content,
+                content=self._normalize_ru_text(row.content),
                 run_id=row.run_id,
                 created_at=self._as_iso(row.created_at),
             )
@@ -128,9 +136,9 @@ class ChatService:
             result.append(
                 ChatSearchHitResponse(
                     session_id=int(session_id),
-                    title=str(title or 'Новый чат'),
+                    title=self._normalize_ru_text(str(title or 'Новый чат')),
                     message_id=int(message_id),
-                    excerpt=self._make_excerpt(str(content or ''), q),
+                    excerpt=self._make_excerpt(self._normalize_ru_text(str(content or '')), q),
                     created_at=self._as_iso(created_at),
                 )
             )
@@ -159,3 +167,34 @@ class ChatService:
         if hasattr(value, 'isoformat'):
             return value.isoformat()
         return str(value)
+
+    @staticmethod
+    def _normalize_ru_text(value: str) -> str:
+        text = str(value or '')
+        if not text:
+            return text
+
+        # Common mojibake symbols when UTF-8 text was decoded as cp1251.
+        suspect = {
+            *range(0x0402, 0x0410),
+            *range(0x0452, 0x0460),
+        }
+        if not any(ord(ch) in suspect for ch in text):
+            return text
+
+        try:
+            fixed = text.encode('cp1251').decode('utf-8')
+        except Exception:
+            return text
+
+        def quality(s: str) -> tuple[int, int]:
+            bad = sum(1 for ch in s if ord(ch) in suspect)
+            low = s.lower()
+            good = sum(low.count(bg) for bg in ('ст', 'но', 'ни', 'на', 'то', 'пр', 'по', 'ро', 'ен'))
+            return bad, good
+
+        bad_src, good_src = quality(text)
+        bad_fix, good_fix = quality(fixed)
+        if bad_fix < bad_src and good_fix >= good_src:
+            return fixed
+        return text

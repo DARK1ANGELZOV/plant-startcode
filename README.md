@@ -2,6 +2,11 @@
 
 Готовая к внедрению платформа сегментации и морфометрии растений (Arugula/Wheat) с классами `root`, `stem`, `leaves`.
 
+## Полезные ссылки
+
+- Демо продукта (видео): `https://vk.ru/video237618222_456240010?list=ln-xSheKrlqhZHvJZisxc`
+- Актуальный проект разметки RoboFlow (Instance Segmentation): `https://app.roboflow.com/s-workspace-wlhsh/plant_final`
+
 ## Сильные стороны решения
 
 - Единый продуктовый контур: от загрузки фото и сегментации до морфометрии, рекомендаций и отчетов.
@@ -356,8 +361,7 @@ pip install plantcv
 
 ## Разметка в Roboflow
 
-- Проект (Instance Segmentation): `https://app.roboflow.com/s-workspace-wlhsh/plant-2f4ay`
-- Актуальная версия датасета (строгая фильтрация): `https://app.roboflow.com/s-workspace-wlhsh/plant-2f4ay/2`
+- Проект (Instance Segmentation): `https://app.roboflow.com/s-workspace-wlhsh/plant_final`
 - Автоподготовка upload pack: `python -m tools.prepare_roboflow_pack ...`
 - Строгая подготовка gold-pack: `python -m tools.prepare_roboflow_gold_pack ...`
 - Автозагрузка в Roboflow: `python -m tools.upload_roboflow_pack ...`

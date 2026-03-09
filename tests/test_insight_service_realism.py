@@ -92,7 +92,8 @@ def test_unreliable_scale_blocks_mm_conversion() -> None:
         summary={'calibration_reliable': False},
     )
     text = service.compose_reply(result)
-    assert 'Невозможен: нет валидной геометрической калибровки' in text
+    assert 'Перевод в мм невозможен' in text
+    assert 'нет валидной геометрической калибровки' in text
 
 
 def test_reliable_scale_shows_metric_mm() -> None:
@@ -146,7 +147,7 @@ def test_reply_uses_px_when_mm_not_reliable() -> None:
     text = service.compose_reply(result)
     assert '2. Измерения (px):' in text
     assert 'Длина корня: 140.0 px' in text
-    assert 'Невозможен: нет валидной геометрической калибровки' in text
+    assert 'Перевод в мм невозможен' in text
 
 
 def test_reply_hides_low_confidence_numbers() -> None:

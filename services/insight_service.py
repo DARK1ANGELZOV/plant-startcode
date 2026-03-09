@@ -96,16 +96,23 @@ class InsightService:
         summary: dict,
     ) -> tuple[list[str], bool]:
         calibration_reliable = bool(summary.get('calibration_reliable', result.scale_source == 'chessboard'))
+        mm_conversion_possible = bool(summary.get('mm_conversion_possible', calibration_reliable))
+        mm_estimated = bool(summary.get('mm_estimated', mm_conversion_possible and (not calibration_reliable)))
         mm_lines: list[str] = []
-        if not calibration_reliable:
-            mm_lines.append('- Невозможен: нет валидной геометрической калибровки камеры.')
+        if not mm_conversion_possible:
+            mm_lines.append('- Перевод в мм невозможен: нет валидной геометрической калибровки камеры.')
             mm_lines.append('- Для реальных мм используйте калиброванный профиль камеры или кадр с эталоном.')
             return mm_lines, False
 
         source = str(summary.get('calibration_source', result.scale_source or 'unknown'))
         camera_profile = str(summary.get('calibration_camera_id', summary.get('camera_id', 'default')))
-        mm_lines.append(f'- Возможен: {float(result.scale_mm_per_px):.5f} мм/пикс')
-        mm_lines.append(f'- Источник: {source} (camera_id: {camera_profile})')
+        if mm_estimated:
+            mm_lines.append(f'- Возможен (оценочно): {float(result.scale_mm_per_px):.5f} мм/пикс')
+            mm_lines.append(f'- Источник: {source} (camera_id: {camera_profile}, оценочный масштаб)')
+        else:
+            mm_lines.append(f'- Возможен: {float(result.scale_mm_per_px):.5f} мм/пикс')
+            mm_lines.append(f'- Источник: {source} (camera_id: {camera_profile})')
+
         cal_err = summary.get('calibration_error_pct')
         if cal_err is not None:
             try:

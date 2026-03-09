@@ -865,6 +865,22 @@ class InferenceService:
         valid_scale_sources = {
             str(x) for x in metric_policy.get('valid_scale_sources', ['chessboard', 'charuco', 'cache_scene', 'cache_scene_near'])
         }
+        allow_estimated_mm_when_unreliable = bool(metric_policy.get('allow_estimated_mm_when_unreliable', False))
+        estimated_scale_sources = {
+            str(x)
+            for x in metric_policy.get(
+                'estimated_scale_sources',
+                [
+                    'fallback',
+                    'cache',
+                    'cache+adaptive_prior',
+                    'adaptive_prior',
+                    'auto_profile',
+                    'cache+auto_profile',
+                    'cache+auto_profile+adaptive_prior',
+                ],
+            )
+        }
         min_reliable_conf = float(metric_policy.get('min_confidence_for_reliable_measurements', 0.7))
         allow_adaptive_scale = bool(self.config.get('morphometry', {}).get('adaptive_scale', {}).get('enabled', False))
         auto_profile_cfg = self.config.get('calibration', {}).get('auto_profile', {})
@@ -993,6 +1009,21 @@ class InferenceService:
                 elif scale_source == 'cache+auto_profile':
                     scale_source = 'cache+auto_profile+adaptive_prior'
 
+        has_numeric_scale = (
+            scale_mm_per_px is not None
+            and math.isfinite(float(scale_mm_per_px))
+            and float(scale_mm_per_px) > 0.0
+        )
+        mm_conversion_possible = bool(
+            calibration_reliable
+            or (
+                allow_estimated_mm_when_unreliable
+                and has_numeric_scale
+                and str(scale_source) in estimated_scale_sources
+            )
+        )
+        mm_estimated = bool(mm_conversion_possible and (not calibration_reliable))
+
         overlay_path = run_dir / 'overlay.png'
         self.storage.save_image(overlay_path, yolo_result['overlay'])
 
@@ -1065,7 +1096,7 @@ class InferenceService:
                 length_px = bbox_major_px
 
             # Real metric conversion depends on scale validity; confidence affects trust, not conversion itself.
-            mm_allowed = calibration_reliable
+            mm_allowed = mm_conversion_possible
             record = {
                 'instance_id': det.instance_id,
                 'crop': crop,
@@ -1186,11 +1217,23 @@ class InferenceService:
         summary['measurement_trust_score'] = trust_payload['score']
         summary['measurement_trust_level'] = trust_payload['level']
         summary['measurement_trust_factors'] = trust_payload['factors']
-        summary['mm_conversion_possible'] = bool(calibration_reliable)
-        summary['mm_per_pixel'] = float(scale_mm_per_px) if calibration_reliable else None
-        summary['calibration_source'] = str(scale_source) if calibration_reliable else None
-        cal_error_map = {'chessboard': 3.0, 'charuco': 3.5, 'cache': 6.0, 'cache_scene': 4.5, 'cache_scene_near': 5.0}
-        summary['calibration_error_pct'] = cal_error_map.get(str(scale_source).split('+')[0]) if calibration_reliable else None
+        summary['mm_conversion_possible'] = bool(mm_conversion_possible)
+        summary['mm_estimated'] = bool(mm_estimated)
+        summary['mm_conversion_mode'] = 'reliable' if calibration_reliable else ('estimated' if mm_estimated else 'disabled')
+        summary['mm_per_pixel'] = float(scale_mm_per_px) if mm_conversion_possible else None
+        summary['calibration_source'] = str(scale_source) if mm_conversion_possible else None
+        cal_error_map = {
+            'chessboard': 3.0,
+            'charuco': 3.5,
+            'cache_scene': 4.5,
+            'cache_scene_near': 5.0,
+            'cache': 6.0,
+            'cache+auto_profile': 6.0,
+            'auto_profile': 8.0,
+            'adaptive_prior': 14.0,
+            'fallback': 18.0,
+        }
+        summary['calibration_error_pct'] = cal_error_map.get(str(scale_source).split('+')[0]) if mm_conversion_possible else None
 
         if inference_mode in {'model_unavailable', 'model_low_confidence', 'model_no_detections'}:
             summary['inference_note'] = (
@@ -1214,6 +1257,10 @@ class InferenceService:
         elif calibration_reliable:
             summary['calibration_note'] = (
                 'Перевод в мм разрешен: есть валидная геометрическая калибровка.'
+            )
+        elif mm_conversion_possible:
+            summary['calibration_note'] = (
+                'Показаны оценочные мм по профилю камеры/кэшу. Для высокой точности добавьте эталон в кадр.'
             )
         else:
             summary['calibration_note'] = (

@@ -71,16 +71,36 @@ class RecommendationService:
                 )
 
             if (not absolute_scale_reliable) and crop_thresholds:
+                estimated_sources = {
+                    'fallback',
+                    'cache',
+                    'cache+adaptive_prior',
+                    'adaptive_prior',
+                    'auto_profile',
+                    'cache+auto_profile',
+                    'cache+auto_profile+adaptive_prior',
+                }
+                scale_base = str(scale_source or 'unknown').split('+')[0]
+                has_estimated_mm = scale_base in estimated_sources
                 recommendations.append(
                     Recommendation(
                         severity='warning',
                         message=(
-                            f'{crop}: перевод в мм невозможен без валидной геометрической калибровки '
-                            '(шахматка/линейка/эталон или заранее вычисленный mm_per_pixel для этой камеры).'
+                            f'{crop}: мм рассчитаны по оценочному масштабу ({scale_source}). '
+                            'Точность ниже, чем при калибровке по эталону.'
+                            if has_estimated_mm
+                            else (
+                                f'{crop}: перевод в мм невозможен без валидной геометрической калибровки '
+                                '(шахматка/линейка/эталон или заранее вычисленный mm_per_pixel для этой камеры).'
+                            )
                         ),
                         action=(
-                            'Используйте текущие px-метрики для сравнений между кадрами. '
-                            'Чтобы получить мм, добавьте калибровочный эталон и повторите анализ.'
+                            'Используйте текущие мм как ориентировочные и подтвердите их калибровочным кадром.'
+                            if has_estimated_mm
+                            else (
+                                'Используйте текущие px-метрики для сравнений между кадрами. '
+                                'Чтобы получить мм, добавьте калибровочный эталон и повторите анализ.'
+                            )
                         ),
                     )
                 )

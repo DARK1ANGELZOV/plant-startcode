@@ -108,6 +108,15 @@ morphometry:
   metric_policy:
     strict_scale_required: true
     min_confidence_for_reliable_measurements: 0.7
+    allow_estimated_mm_when_unreliable: true
+    estimated_scale_sources:
+    - fallback
+    - cache
+    - cache+adaptive_prior
+    - adaptive_prior
+    - auto_profile
+    - cache+auto_profile
+    - cache+auto_profile+adaptive_prior
     valid_scale_sources:
     - chessboard
     - charuco
